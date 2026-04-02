@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper with RL
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      5.0
 // @license      MIT
 // @description  Auto-answer quiz questions with Reinforcement Learning on any site
 // @author       You
@@ -138,13 +138,19 @@
   function getAPIKeys() {
     return {
       openrouter: GM_getValue('openrouter_key', ''),
-      deepseek: GM_getValue('deepseek_key', '')
+      deepseek: GM_getValue('deepseek_key', ''),
+      vercel: GM_getValue('vercel_key', ''),
+      opencodezen: GM_getValue('opencodezen_key', ''),
+      cloudflare: GM_getValue('cloudflare_key', '')
     };
   }
   
   function saveAPIKeys(keys) {
     GM_setValue('openrouter_key', keys.openrouter);
     GM_setValue('deepseek_key', keys.deepseek);
+    GM_setValue('vercel_key', keys.vercel);
+    GM_setValue('opencodezen_key', keys.opencodezen);
+    GM_setValue('cloudflare_key', keys.cloudflare);
   }
   
   // Status display
@@ -259,6 +265,7 @@
         seen.add(q.text);
         uniqueQuestions.push(q);
       }
+    }
     
     
     uniqueQuestions.sort((a, b) => b.text.length - a.text.length);
@@ -399,7 +406,7 @@
   
   // API call to get answer with full page context
   async function getAnswerWithContext(pageContent, keys) {
-    const results = { openrouter: null, deepseek: null };
+    const results = { openrouter: null, deepseek: null, vercel: null, opencodezen: null, cloudflare: null };
     
     // Build comprehensive prompt with full page content
     const prompt = `I need you to analyze this quiz/test page and answer the question. Here's the full page content:
@@ -485,6 +492,66 @@ If there's no clear question, respond with "NO_QUESTION".`;
       }
     }
     
+    // Call Vercel AI
+    if (keys.vercel) {
+      showStatus('🌐 Vercel AI analyzing screen...', 'info');
+      try {
+        const response = await fetch('https://api.vercel.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.vercel}`
+          },
+          body: JSON.stringify({
+            model: 'vercel/gpt-4o',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 100
+          })
+        });
+        
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        results.vercel = answer;
+        showStatus('✅ Vercel AI analyzed screen', 'success');
+      } catch (error) {
+        console.error('Vercel AI error:', error);
+        showStatus('❌ Vercel AI failed', 'error');
+      }
+    }
+    
+    // Call OpenCode Zen AI
+    if (keys.opencodezen) {
+      showStatus('🌐 OpenCode Zen analyzing screen...', 'info');
+      try {
+        const response = await fetch('https://api.opencodezen.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.opencodezen}`
+          },
+          body: JSON.stringify({
+            model: 'opencodezen/gpt-4',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 100
+          })
+        });
+        
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        results.opencodezen = answer;
+        showStatus('✅ OpenCode Zen analyzed screen', 'success');
+      } catch (error) {
+        console.error('OpenCode Zen error:', error);
+        showStatus('❌ OpenCode Zen failed', 'error');
+      }
+    }
+    
     return results;
   }
   
@@ -506,29 +573,47 @@ If there's no clear question, respond with "NO_QUESTION".`;
     return null;
   }
   
-  // Get consensus answer from both AIs
+  // Get consensus answer from all AIs
   async function getConsensusAnswer(pageContent, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.deepseek) {
+    if (!keys.openrouter && !keys.deepseek && !keys.vercel) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
     
-    showStatus('🤖 Both AIs reading screen...', 'info');
+    showStatus('🤖 All AIs reading screen...', 'info');
     
     const results = await getAnswerWithContext(pageContent, keys);
     
     const openrouterAnswer = parseAnswer(results.openrouter);
     const deepseekAnswer = parseAnswer(results.deepseek);
+    const vercelAnswer = parseAnswer(results.vercel);
     
     showStatus(`🤖 OpenRouter: ${openrouterAnswer !== null ? openrouterAnswer + 1 : 'no answer'}`, 'info');
     showStatus(`🤖 DeepSeek: ${deepseekAnswer !== null ? deepseekAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 Vercel: ${vercelAnswer !== null ? vercelAnswer + 1 : 'no answer'}`, 'info');
     
-    // If both agree, use that answer
-    if (openrouterAnswer !== null && deepseekAnswer !== null && openrouterAnswer === deepseekAnswer) {
-      showStatus('✅ Both AIs agree on answer!', 'success');
-      return openrouterAnswer;
+    // Count votes for each answer
+    const votes = {};
+    if (openrouterAnswer !== null) votes[openrouterAnswer] = (votes[openrouterAnswer] || 0) + 1;
+    if (deepseekAnswer !== null) votes[deepseekAnswer] = (votes[deepseekAnswer] || 0) + 1;
+    if (vercelAnswer !== null) votes[vercelAnswer] = (votes[vercelAnswer] || 0) + 1;
+    
+    // Find the answer with most votes
+    let bestAnswer = null;
+    let bestVotes = 0;
+    for (const [answer, count] of Object.entries(votes)) {
+      if (count > bestVotes) {
+        bestVotes = count;
+        bestAnswer = parseInt(answer);
+      }
+    }
+    
+    // If majority agrees (2 or more votes)
+    if (bestVotes >= 2) {
+      showStatus(`✅ ${bestVotes} AIs agree on answer!`, 'success');
+      return bestAnswer;
     }
     
     // If only one has answer, use that
@@ -542,13 +627,13 @@ If there's no clear question, respond with "NO_QUESTION".`;
       return deepseekAnswer;
     }
     
-    showStatus('❌ Neither AI could determine answer', 'error');
+    if (vercelAnswer !== null) {
+      showStatus('✅ Using Vercel answer', 'success');
+      return vercelAnswer;
+    }
+    
+    showStatus('❌ No AI could determine answer', 'error');
     return null;
-  }
-  
-  // API call to get answer (legacy function for compatibility)
-  async function getAnswer(question, options, model) {
-    return getConsensusAnswer({ questions: [question], options: options.map(o => o.text), bodyText: question }, options);
   }
   
   // API call with forced RL model
@@ -830,11 +915,6 @@ Your answer (just the number):`;
     }
     
     return null;
-  }
-  
-  // Legacy function for compatibility
-  async function getBothAIAnswers(question, options) {
-    return getBothAIAnswersWithRetry(question, options);
   }
   
   // Get text answer from AI for typing questions
@@ -1587,6 +1667,10 @@ Respond with just the answer text, nothing else.`;
         <label style="display: block; margin-bottom: 5px; font-weight: bold;">DeepSeek API Key:</label>
         <input type="password" id="wg_deepseek_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.deepseek}" placeholder="sk-...">
       </div>
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Vercel AI API Key:</label>
+        <input type="password" id="wg_vercel_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.vercel}" placeholder="vercel-...">
+      </div>
       <div style="text-align: right; margin-top: 20px;">
         <button id="wg_save_keys" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
         <button id="wg_cancel_keys" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cancel</button>
@@ -1607,7 +1691,8 @@ Respond with just the answer text, nothing else.`;
       e.stopPropagation();
       const openrouterKey = document.getElementById('wg_openrouter_key').value.trim();
       const deepseekKey = document.getElementById('wg_deepseek_key').value.trim();
-      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey });
+      const vercelKey = document.getElementById('wg_vercel_key').value.trim();
+      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey });
       dialog.remove();
       showStatus('API keys saved!', 'success');
     };
@@ -1624,6 +1709,7 @@ Respond with just the answer text, nothing else.`;
     const cancelBtn = document.getElementById('wg_cancel_keys');
     const openrouterInput = document.getElementById('wg_openrouter_key');
     const deepseekInput = document.getElementById('wg_deepseek_key');
+    const vercelInput = document.getElementById('wg_vercel_key');
     
     if (saveBtn) saveBtn.onclick = saveHandler;
     if (cancelBtn) cancelBtn.onclick = cancelHandler;
@@ -1635,8 +1721,9 @@ Respond with just the answer text, nothing else.`;
       }
     };
     
-    if (openrouterInput) openrouterInput.addEventListener('keydown', enterHandler);
-    if (deepseekInput) deepseekInput.addEventListener('keydown', enterHandler);
+    if (openrouterInput) openrouterInput.addEventListener('keypress', enterHandler);
+    if (deepseekInput) deepseekInput.addEventListener('keypress', enterHandler);
+    if (vercelInput) vercelInput.addEventListener('keypress', enterHandler);
     
     // Close on escape
     const escHandler = (e) => {
