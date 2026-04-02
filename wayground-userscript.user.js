@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper with RL
 // @namespace    http://tampermonkey.net/
-// @version      4.5
+// @version      4.6
 // @license      MIT
 // @description  Auto-answer quiz questions with Reinforcement Learning on any site
 // @author       You
