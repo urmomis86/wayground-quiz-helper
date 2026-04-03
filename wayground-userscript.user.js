@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper with RL
 // @namespace    http://tampermonkey.net/
-// @version      5.0
+// @version      5.1
 // @license      MIT
 // @description  Auto-answer quiz questions with Reinforcement Learning on any site
 // @author       You
@@ -103,35 +103,6 @@
         showStatus('Update check failed', 'error');
       }
     });
-  }
-  
-  // Reinforcement Learning System
-  let rlStats = GM_getValue('wayground_rl_stats', {
-    'openrouter/free': { pulls: 1, rewards: 0, totalReward: 0 },
-    'openrouter/meta-llama/llama-3.2-3b-instruct:free': { pulls: 1, rewards: 0, totalReward: 0 },
-    'deepseek/deepseek-chat': { pulls: 1, rewards: 0, totalReward: 0 }
-  });
-  
-  function saveRLStats() {
-    GM_setValue('wayground_rl_stats', rlStats);
-  }
-  
-  function selectBestModel() {
-    let bestModel = 'openrouter/free';
-    let bestScore = -Infinity;
-    
-    for (const model in rlStats) {
-      const stats = rlStats[model];
-      const avgReward = stats.rewards > 0 ? stats.totalReward / stats.rewards : 0;
-      if (avgReward > bestScore) {
-        bestScore = avgReward;
-        bestModel = model;
-      }
-    }
-    
-    rlStats[bestModel].pulls++;
-    saveRLStats();
-    return bestModel;
   }
   
   // API keys storage
@@ -636,80 +607,6 @@ If there's no clear question, respond with "NO_QUESTION".`;
     return null;
   }
   
-  // API call with forced RL model
-  async function getAnswerWithRL(question, options, model) {
-    const keys = getAPIKeys();
-    
-    if (!keys.openrouter && !keys.deepseek) {
-      showStatus('⚠️ Set API keys in settings', 'error');
-      return null;
-    }
-    
-    showStatus(`🎯 RL forcing model: ${model}`, 'info');
-    
-    const prompt = `Question: ${question}\n\nOptions:\n${options.map((opt, i) => `${i + 1}. ${opt.text}`).join('\n')}\n\nWhich option is correct? Just give the number.`;
-    
-    // Use the RL-selected model
-    if (model.includes('openrouter') && keys.openrouter) {
-      showStatus('🌐 RL using OpenRouter...', 'info');
-      try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.openrouter}`,
-            'HTTP-Referer': 'https://openrouter.ai/'
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 50
-          })
-        });
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        const answerNum = parseInt(answer);
-        
-        if (answerNum >= 1 && answerNum <= options.length) {
-          return answerNum - 1;
-        }
-      } catch (error) {
-        console.error('OpenRouter RL error:', error);
-        showStatus('❌ RL OpenRouter failed', 'error');
-      }
-    } else if (model.includes('deepseek') && keys.deepseek) {
-      showStatus('🌐 RL using DeepSeek...', 'info');
-      try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.deepseek}`
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 50
-          })
-        });
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        const answerNum = parseInt(answer);
-        
-        if (answerNum >= 1 && answerNum <= options.length) {
-          return answerNum - 1;
-        }
-      } catch (error) {
-        console.error('DeepSeek RL error:', error);
-        showStatus('❌ RL DeepSeek failed', 'error');
-      }
-    }
-    
-    return null;
-  }
-  
   // Call both AIs simultaneously with improved prompting for maximum accuracy
   async function getBothAIAnswersWithRetry(question, options) {
     const keys = getAPIKeys();
@@ -1190,356 +1087,7 @@ Respond with just the answer text, nothing else.`;
       showStatus('✅ Answer clicked!', 'success');
       console.log('=== HYBRID AI COMPLETE ===');
     }, 2000);
-    
-    // Track for RL feedback
-    trackAnswerForFeedback(answerIndex, rlModel, decisionMethod);
   }
-  
-  // Track text answer for feedback
-  function trackTextAnswerForFeedback(input, answer, model) {
-    window._lastTextAnswer = {
-      input: input,
-      answer: answer,
-      model: model,
-      timestamp: Date.now()
-    };
-    
-    // Check for wrong answer after delay
-    setTimeout(() => {
-      detectWrongTextAnswer();
-    }, 5000);
-  }
-  
-  // Detect if text answer was wrong
-  function detectWrongTextAnswer() {
-    const lastAnswer = window._lastTextAnswer;
-    if (!lastAnswer) return;
-    
-    const pageText = document.body.innerText?.toLowerCase() || '';
-    const wrongIndicators = ['incorrect', 'wrong', 'try again', 'not right', 'failed', 'error'];
-    const isWrong = wrongIndicators.some(indicator => pageText.includes(indicator));
-    
-    if (isWrong && rlStats[lastAnswer.model]) {
-      rlStats[lastAnswer.model].totalReward -= 100;
-      saveRLStats();
-      showStatus(`📊 RL: ${lastAnswer.model} -100 PENALTY!`, 'error');
-    } else if (!isWrong && rlStats[lastAnswer.model]) {
-      rlStats[lastAnswer.model].totalReward += 100;
-      saveRLStats();
-      showStatus(`📊 RL: ${lastAnswer.model} +100 reward`, 'success');
-    }
-    
-    window._lastTextAnswer = null;
-  }
-  
-  // Track answer and wait for feedback - ENHANCED DETECTION
-  function trackAnswerForFeedback(answerIndex, model, method) {
-    // Store the answer info for later feedback
-    window._lastAnswer = {
-      index: answerIndex,
-      model: model,
-      method: method,
-      timestamp: Date.now(),
-      checkCount: 0,
-      wrongDetected: false,
-      correctDetected: false
-    };
-    
-    showStatus('🔍 Monitoring for answer feedback...', 'info');
-    
-    // Start score monitoring for this answer
-    startScoreMonitoring();
-    
-    // Check multiple times for feedback detection
-    const checkInterval = setInterval(() => {
-      window._lastAnswer.checkCount++;
-      
-      const isWrong = detectWrongAnswerImmediate();
-      const isCorrect = detectCorrectAnswerImmediate();
-      
-      if (isWrong && !window._lastAnswer.wrongDetected) {
-        window._lastAnswer.wrongDetected = true;
-        applyWrongAnswerPenalty();
-        clearInterval(checkInterval);
-        window._lastAnswer = null;
-      } else if (isCorrect && !window._lastAnswer.correctDetected) {
-        window._lastAnswer.correctDetected = true;
-        applyCorrectAnswerReward();
-        clearInterval(checkInterval);
-        window._lastAnswer = null;
-      } else if (window._lastAnswer.checkCount >= 5) {
-        // After 5 checks, if neither detected, assume neutral
-        showStatus('⏱️ No clear feedback detected', 'info');
-        clearInterval(checkInterval);
-        window._lastAnswer = null;
-      }
-    }, 1500); // Check every 1.5 seconds for faster detection
-  }
-  
-  // Track score for change detection
-  let lastKnownScore = null;
-  let scoreCheckInterval = null;
-  
-  // Start monitoring score changes
-  function startScoreMonitoring() {
-    // Get initial score
-    lastKnownScore = extractCurrentScore();
-    console.log('Initial score:', lastKnownScore);
-    
-    // Check score every 2 seconds
-    if (scoreCheckInterval) clearInterval(scoreCheckInterval);
-    scoreCheckInterval = setInterval(() => {
-      const currentScore = extractCurrentScore();
-      if (lastKnownScore !== null && currentScore !== null) {
-        if (currentScore < lastKnownScore) {
-          console.log('Score decreased:', lastKnownScore, '->', currentScore);
-          showStatus('📉 Score decreased - wrong answer detected!', 'error');
-          if (window._lastAnswer && !window._lastAnswer.wrongDetected) {
-            window._lastAnswer.wrongDetected = true;
-            applyWrongAnswerPenalty();
-          }
-        } else if (currentScore > lastKnownScore) {
-          console.log('Score increased:', lastKnownScore, '->', currentScore);
-          showStatus('📈 Score increased - correct answer!', 'success');
-        }
-      }
-      lastKnownScore = currentScore;
-    }, 2000);
-  }
-  
-  // Extract score from page
-  function extractCurrentScore() {
-    const pageText = document.body.innerText || '';
-    
-    // Look for common score patterns
-    const scorePatterns = [
-      /score[:\s]+(\d+)/i,
-      /(\d+)\s*\/\s*(\d+)/,
-      /(\d+)%/,
-      /points[:\s]+(\d+)/i,
-      /(\d+)\s+points/i,
-      /score[=:]\s*(\d+)/i
-    ];
-    
-    for (const pattern of scorePatterns) {
-      const match = pageText.match(pattern);
-      if (match) {
-        return parseInt(match[1]);
-      }
-    }
-    
-    return null;
-  }
-  
-  // Immediate wrong answer detection with enhanced visual checking
-  function detectWrongAnswerImmediate() {
-    const pageText = document.body.innerText?.toLowerCase() || '';
-    
-    // Enhanced wrong indicators - text based
-    const wrongIndicators = [
-      'incorrect', 'wrong', 'try again', 'not right', 'failed', 'error',
-      'oops', 'sorry', 'that\'s not', 'not correct', 'unfortunately',
-      'bad answer', 'invalid', 'rejected', 'denied', 'nope',
-      '❌', '✗', '×', '&#10008;', '&#x2717;', '&#x2718;',
-      'not the right', 'keep trying', 'almost', 'not quite',
-      'missed it', 'incorrect answer', 'wrong answer',
-      // Additional quiz platform indicators
-      'better luck next time', 'you missed', 'not quite right',
-      'that\'s incorrect', 'false', 'no,', 'negative',
-      'lose', 'lost', 'penalty', 'minus', 'deducted',
-      'try another', 'select again', 'pick again'
-    ];
-    
-    // Check for visual error indicators (red styling)
-    const errorSelectors = [
-      '.error', '.wrong', '.incorrect', '.failed', '.alert-danger',
-      '[class*="error"]', '[class*="wrong"]', '[class*="incorrect"]',
-      '[style*="color: red"]', '[style*="color:red"]',
-      '[style*="background: red"]', '[style*="background:red"]',
-      '[style*="border-color: red"]', '[style*="border-color:red"]',
-      '[style*="#ff0000"]', '[style*="#ff4444"]', '[style*="#ff6666"]',
-      '.text-danger', '.has-error', '.is-invalid', '.form-error',
-      // Additional selectors
-      '.ng-invalid', '.field-error', '.validation-error',
-      '[aria-invalid="true"]', '.answer-incorrect'
-    ];
-    
-    let errorElements = [];
-    for (const selector of errorSelectors) {
-      try {
-        const elements = document.querySelectorAll(selector);
-        errorElements.push(...elements);
-      } catch (e) {}
-    }
-    
-    // Also check computed styles for red colors
-    const allElements = document.querySelectorAll('div, span, p, button, li, td');
-    for (const el of allElements) {
-      const style = window.getComputedStyle(el);
-      const color = style.color;
-      const bgColor = style.backgroundColor;
-      const borderColor = style.borderColor;
-      
-      if (color.includes('rgb(255, 0, 0)') || color.includes('rgb(255,0,0)') ||
-          color.includes('rgb(220, 53, 69)') || color.includes('#dc3545') ||
-          bgColor.includes('rgb(255, 0, 0)') || bgColor.includes('rgba(255, 0, 0,') ||
-          borderColor.includes('rgb(255, 0, 0)') || borderColor.includes('rgb(220, 53, 69)')) {
-        errorElements.push(el);
-      }
-    }
-    
-    const hasVisualError = errorElements.length > 0;
-    const hasTextError = wrongIndicators.some(indicator => pageText.includes(indicator.toLowerCase()));
-    
-    // Check for animation/shake effects
-    const hasShakeAnimation = document.querySelectorAll('[style*="shake"], [class*="shake"], [class*="bounce"], [class*="wobble"]').length > 0;
-    
-    // Check for modal/popup with error
-    const hasErrorModal = document.querySelectorAll('[role="alert"], [role="dialog"], .modal, .popup, .toast').length > 0 &&
-                          wrongIndicators.some(i => pageText.includes(i.toLowerCase()));
-    
-    // Check for disabled inputs (locked after wrong answer)
-    const disabledInputs = document.querySelectorAll('input:disabled, button:disabled, [disabled]');
-    const hasDisabledElements = disabledInputs.length > 0;
-    
-    const isWrong = hasVisualError || hasTextError || hasShakeAnimation || hasErrorModal;
-    
-    if (isWrong) {
-      console.log('Wrong answer detected:', { 
-        visual: hasVisualError, 
-        text: hasTextError, 
-        shake: hasShakeAnimation, 
-        modal: hasErrorModal,
-        disabled: hasDisabledElements,
-        errorElements: errorElements.length 
-      });
-    }
-    
-    return isWrong;
-  }
-  
-  // Detect if answer was correct (green indicators)
-  function detectCorrectAnswerImmediate() {
-    const pageText = document.body.innerText?.toLowerCase() || '';
-    
-    // Correct indicators
-    const correctIndicators = [
-      'correct', 'right', 'good job', 'well done', 'excellent', 'perfect',
-      '✅', '✓', '☑', '&#10004;', '&#x2713;', '&#x2714;',
-      'that\'s right', 'you got it', 'nice work', 'correct answer'
-    ];
-    
-    // Visual success indicators (green styling)
-    const successSelectors = [
-      '.success', '.correct', '.right', '.alert-success',
-      '[class*="success"]', '[class*="correct"]', '[class*="right"]',
-      '[style*="color: green"]', '[style*="color:green"]',
-      '[style*="background: green"]', '[style*="background:green"]',
-      '[style*="#00aa00"]', '[style*="#28a745"]',
-      '.text-success', '.has-success', '.is-valid'
-    ];
-    
-    let successElements = [];
-    for (const selector of successSelectors) {
-      try {
-        const elements = document.querySelectorAll(selector);
-        successElements.push(...elements);
-      } catch (e) {}
-    }
-    
-    // Check computed styles for green
-    const allElements = document.querySelectorAll('div, span, p, button');
-    for (const el of allElements) {
-      const style = window.getComputedStyle(el);
-      const color = style.color;
-      const bgColor = style.backgroundColor;
-      
-      if (color.includes('rgb(0, 128, 0)') || color.includes('rgb(0,255,0)') ||
-          color.includes('rgb(40, 167, 69)') || color.includes('#28a745') ||
-          bgColor.includes('rgb(0, 128, 0)') || bgColor.includes('rgba(0, 128, 0,')) {
-        successElements.push(el);
-      }
-    }
-    
-    const hasVisualSuccess = successElements.length > 0;
-    const hasTextSuccess = correctIndicators.some(indicator => pageText.includes(indicator.toLowerCase()));
-    
-    const isCorrect = hasVisualSuccess || hasTextSuccess;
-    
-    if (isCorrect) {
-      console.log('Correct answer detected:', { visual: hasVisualSuccess, text: hasTextSuccess });
-    }
-    
-    return isCorrect;
-  }
-  
-  // Apply penalty for wrong answer
-  function applyWrongAnswerPenalty() {
-    const lastAnswer = window._lastAnswer;
-    if (!lastAnswer || lastAnswer.wrongDetected) return;
-    
-    showStatus('❌ WRONG ANSWER AUTO-DETECTED! -100 PENALTY!', 'error');
-    
-    // Apply -100 penalty to the RL model
-    if (rlStats[lastAnswer.model]) {
-      rlStats[lastAnswer.model].totalReward -= 100;
-      rlStats[lastAnswer.model].rewards = Math.max(0, rlStats[lastAnswer.model].rewards - 1);
-      saveRLStats();
-      showStatus(`📊 RL: ${lastAnswer.model} -100 PENALTY!`, 'error');
-    }
-    
-    // Clear tracked answer
-    window._lastAnswer = null;
-  }
-  
-  // Apply reward for correct answer
-  function applyCorrectAnswerReward() {
-    const lastAnswer = window._lastAnswer;
-    if (!lastAnswer) return;
-    
-    // Answer was correct - give reward
-    if (rlStats[lastAnswer.model]) {
-      rlStats[lastAnswer.model].rewards++;
-      rlStats[lastAnswer.model].totalReward += 100;
-      saveRLStats();
-      showStatus(`📊 RL: ${lastAnswer.model} +100 reward`, 'success');
-    }
-    
-    // Clear tracked answer
-    window._lastAnswer = null;
-  }
-  
-  // Legacy detectWrongAnswer function (kept for compatibility)
-  function detectWrongAnswer() {
-    const isWrong = detectWrongAnswerImmediate();
-    if (isWrong) {
-      applyWrongAnswerPenalty();
-    } else {
-      applyCorrectAnswerReward();
-    }
-  }
-  
-  // Manual wrong answer marking
-  function markWrongAnswer() {
-    const lastAnswer = window._lastAnswer;
-    
-    if (!lastAnswer) {
-      showStatus('⚠️ No recent answer to mark as wrong', 'warning');
-      return;
-    }
-    
-    // Apply -100 penalty
-    if (rlStats[lastAnswer.model]) {
-      rlStats[lastAnswer.model].totalReward -= 100;
-      rlStats[lastAnswer.model].rewards = Math.max(0, rlStats[lastAnswer.model].rewards - 1);
-      saveRLStats();
-      showStatus(`❌ MANUAL: ${lastAnswer.model} -100 PENALTY!`, 'error');
-    }
-    
-    window._lastAnswer = null;
-  }
-  
-  // Process page with hybrid AI/RL
   
   // Script enabled state
   let scriptEnabled = GM_getValue('wayground_enabled', true);
@@ -1580,7 +1128,6 @@ Respond with just the answer text, nothing else.`;
         createOptionsMenu();
       }},
       {text: '🔑 API Keys', action: showSettingsDialog},
-      {text: '❌ Wrong Answer', action: markWrongAnswer},
       {text: '📋 Copy Script', action: autoCopyToDownloads}
     ];
     
@@ -1671,6 +1218,14 @@ Respond with just the answer text, nothing else.`;
         <label style="display: block; margin-bottom: 5px; font-weight: bold;">Vercel AI API Key:</label>
         <input type="password" id="wg_vercel_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.vercel}" placeholder="vercel-...">
       </div>
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">OpenCode Zen API Key:</label>
+        <input type="password" id="wg_opencodezen_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.opencodezen}" placeholder="ocz-...">
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cloudflare API Key:</label>
+        <input type="password" id="wg_cloudflare_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.cloudflare}" placeholder="cf-...">
+      </div>
       <div style="text-align: right; margin-top: 20px;">
         <button id="wg_save_keys" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
         <button id="wg_cancel_keys" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cancel</button>
@@ -1692,7 +1247,9 @@ Respond with just the answer text, nothing else.`;
       const openrouterKey = document.getElementById('wg_openrouter_key').value.trim();
       const deepseekKey = document.getElementById('wg_deepseek_key').value.trim();
       const vercelKey = document.getElementById('wg_vercel_key').value.trim();
-      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey });
+      const opencodezenKey = document.getElementById('wg_opencodezen_key').value.trim();
+      const cloudflareKey = document.getElementById('wg_cloudflare_key').value.trim();
+      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey, opencodezen: opencodezenKey, cloudflare: cloudflareKey });
       dialog.remove();
       showStatus('API keys saved!', 'success');
     };
@@ -1710,6 +1267,8 @@ Respond with just the answer text, nothing else.`;
     const openrouterInput = document.getElementById('wg_openrouter_key');
     const deepseekInput = document.getElementById('wg_deepseek_key');
     const vercelInput = document.getElementById('wg_vercel_key');
+    const opencodezenInput = document.getElementById('wg_opencodezen_key');
+    const cloudflareInput = document.getElementById('wg_cloudflare_key');
     
     if (saveBtn) saveBtn.onclick = saveHandler;
     if (cancelBtn) cancelBtn.onclick = cancelHandler;
@@ -1724,6 +1283,8 @@ Respond with just the answer text, nothing else.`;
     if (openrouterInput) openrouterInput.addEventListener('keypress', enterHandler);
     if (deepseekInput) deepseekInput.addEventListener('keypress', enterHandler);
     if (vercelInput) vercelInput.addEventListener('keypress', enterHandler);
+    if (opencodezenInput) opencodezenInput.addEventListener('keypress', enterHandler);
+    if (cloudflareInput) cloudflareInput.addEventListener('keypress', enterHandler);
     
     // Close on escape
     const escHandler = (e) => {
