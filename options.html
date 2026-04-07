@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quiz Answer Finder — Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Quiz Answer Finder — Options</h1>
+    <p>Store your OpenRouter API key securely for the extension to use.</p>
+
+    <div class="row">
+      <label class="toggle-inline">
+        <input id="enabledToggle" type="checkbox" />
+        <span>Extension enabled</span>
+      </label>
+    </div>
+
+    <div class="row">
+      <label for="siteHost">Website (auto-detected)</label>
+      <input id="siteHost" type="text" placeholder="codehs.com" />
+      <div class="hint">Auto-filled from the last page you visited. Open Options while on the target site to update.</div>
+    </div>
+
+    <div class="row">
+      <label class="toggle-inline">
+        <input id="siteScopedToggle" type="checkbox" />
+        <span>Save selectors for this website only</span>
+      </label>
+    </div>
+
+    <div class="row">
+      <label for="providerSelect">Provider</label>
+      <select id="providerSelect">
+        <option value="openrouter">OpenRouter</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="all">All Providers</option>
+      </select>
+      <div class="hint">Choose which API to use for answer lookup and chat. All Providers calls every configured model and picks the best match.</div>
+    </div>
+
+    <div class="provider-section" data-provider="openrouter">
+      <div class="row">
+        <label for="apiKey">OpenRouter API Key</label>
+        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="new-password" />
+      </div>
+
+      <div class="row">
+        <label for="model">OpenRouter Model (primary)</label>
+        <input id="model" type="text" placeholder="openrouter/free" />
+        <div class="hint">Tip: use <code>openrouter/free</code> or any model with the <code>:free</code> suffix.</div>
+      </div>
+
+      <div class="row">
+        <label for="modelSecondary">OpenRouter Model (secondary)</label>
+        <input id="modelSecondary" type="text" placeholder="openrouter/free" />
+        <div class="hint">If set, both OpenRouter models are called and the best match is used.</div>
+      </div>
+
+      <div class="row">
+        <label for="siteUrl">Site URL (optional)</label>
+        <input id="siteUrl" type="text" placeholder="https://example.com" />
+      </div>
+
+      <div class="row">
+        <label for="appName">App Name (optional)</label>
+        <input id="appName" type="text" placeholder="Quiz Answer Finder" />
+      </div>
+    </div>
+
+    <div class="provider-section is-hidden" data-provider="deepseek">
+      <div class="row">
+        <label for="deepseekApiKey">DeepSeek API Key</label>
+        <input id="deepseekApiKey" type="password" placeholder="sk-..." autocomplete="new-password" />
+      </div>
+
+      <div class="row">
+        <label for="deepseekModel">DeepSeek Model</label>
+        <input id="deepseekModel" type="text" placeholder="deepseek-chat" />
+        <div class="hint">Use <code>deepseek-chat</code> or <code>deepseek-reasoner</code>.</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="dailyTokenCap">Daily token cap (optional)</label>
+      <input id="dailyTokenCap" type="number" min="0" step="1" placeholder="50000" />
+      <div class="hint">If set, the status badge will show tokens used today vs this cap.</div>
+    </div>
+
+    <div class="row">
+      <label for="questionSelector">Question selector (advanced)</label>
+      <input id="questionSelector" type="text" placeholder="[data-testid=&quot;question-container-text&quot;] p" />
+      <div class="hint">Optional override for finding the question element.</div>
+    </div>
+
+    <div class="row">
+      <label for="optionSelector">Option selector (advanced)</label>
+      <input id="optionSelector" type="text" placeholder="[data-cy^=&quot;option-&quot;]" />
+      <div class="hint">Optional override for finding answer options.</div>
+    </div>
+
+    <div class="row small">
+      <span>Current key (selected provider): <strong id="masked">(loading...)</strong></span>
+    </div>
+
+    <div class="buttons">
+      <button id="saveBtn">Save Key</button>
+      <button id="pasteBtn" class="secondary">Paste from clipboard</button>
+      <button id="removeBtn" class="danger">Remove Key</button>
+    </div>
+
+    <div id="status" aria-live="polite"></div>
+
+    <section class="chat">
+      <h2>Chat</h2>
+      <p>Talk to the model using your stored OpenRouter key.</p>
+      <div id="chatMessages" class="chat-messages" aria-live="polite"></div>
+      <div class="chat-input">
+        <label class="sr-only" for="chatInput">Message</label>
+        <textarea id="chatInput" rows="3" placeholder="Type a message..."></textarea>
+        <div class="chat-buttons">
+          <button id="chatSendBtn">Send</button>
+          <button id="chatClearBtn" class="secondary">Clear</button>
+        </div>
+      </div>
+      <div id="chatStatus" class="chat-status" aria-live="polite"></div>
+    </section>
+
+    <section class="rl-stats">
+      <h2>RL Model Leaderboard</h2>
+      <p>UCB1 bandit — learns which model answers correctly most often. Improves automatically over time.</p>
+      <div id="rlStatsContainer"><em>Loading...</em></div>
+      <div class="buttons" style="margin-top:8px">
+        <button id="rlResetBtn" class="danger">Reset RL State</button>
+      </div>
+    </section>
+
+    <footer>
+      <small>Note: The key is stored in your browser's extension storage and is not committed to this repository.</small>
+    </footer>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

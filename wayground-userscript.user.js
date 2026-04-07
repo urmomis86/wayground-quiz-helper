@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper with RL
 // @namespace    http://tampermonkey.net/
-// @version      5.1
+// @version      5.2
 // @license      MIT
 // @description  Auto-answer quiz questions with Reinforcement Learning on any site
 // @author       You
@@ -112,7 +112,8 @@
       deepseek: GM_getValue('deepseek_key', ''),
       vercel: GM_getValue('vercel_key', ''),
       opencodezen: GM_getValue('opencodezen_key', ''),
-      cloudflare: GM_getValue('cloudflare_key', '')
+      cloudflare: GM_getValue('cloudflare_key', ''),
+      groq: GM_getValue('groq_key', '')
     };
   }
   
@@ -122,6 +123,7 @@
     GM_setValue('vercel_key', keys.vercel);
     GM_setValue('opencodezen_key', keys.opencodezen);
     GM_setValue('cloudflare_key', keys.cloudflare);
+    GM_setValue('groq_key', keys.groq);
   }
   
   // Status display
@@ -377,7 +379,7 @@
   
   // API call to get answer with full page context
   async function getAnswerWithContext(pageContent, keys) {
-    const results = { openrouter: null, deepseek: null, vercel: null, opencodezen: null, cloudflare: null };
+    const results = { openrouter: null, deepseek: null, vercel: null, opencodezen: null, cloudflare: null, groq: null };
     
     // Build comprehensive prompt with full page content
     const prompt = `I need you to analyze this quiz/test page and answer the question. Here's the full page content:
@@ -523,6 +525,66 @@ If there's no clear question, respond with "NO_QUESTION".`;
       }
     }
     
+    // Call Cloudflare AI
+    if (keys.cloudflare) {
+      showStatus('🌐 Cloudflare analyzing screen...', 'info');
+      try {
+        const response = await fetch('https://api.cloudflare.com/client/v4/ai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.cloudflare}`
+          },
+          body: JSON.stringify({
+            model: 'cf/meta-llama/llama-3.1-8b-instruct',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 100
+          })
+        });
+        
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        results.cloudflare = answer;
+        showStatus('✅ Cloudflare analyzed screen', 'success');
+      } catch (error) {
+        console.error('Cloudflare error:', error);
+        showStatus('❌ Cloudflare failed', 'error');
+      }
+    }
+    
+    // Call Groq AI
+    if (keys.groq) {
+      showStatus('🌐 Groq analyzing screen...', 'info');
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.groq}`
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 100
+          })
+        });
+        
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        results.groq = answer;
+        showStatus('✅ Groq analyzed screen', 'success');
+      } catch (error) {
+        console.error('Groq error:', error);
+        showStatus('❌ Groq failed', 'error');
+      }
+    }
+    
     return results;
   }
   
@@ -548,7 +610,7 @@ If there's no clear question, respond with "NO_QUESTION".`;
   async function getConsensusAnswer(pageContent, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.deepseek && !keys.vercel) {
+    if (!keys.openrouter && !keys.deepseek && !keys.vercel && !keys.opencodezen && !keys.cloudflare && !keys.groq) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
@@ -560,16 +622,25 @@ If there's no clear question, respond with "NO_QUESTION".`;
     const openrouterAnswer = parseAnswer(results.openrouter);
     const deepseekAnswer = parseAnswer(results.deepseek);
     const vercelAnswer = parseAnswer(results.vercel);
+    const opencodezenAnswer = parseAnswer(results.opencodezen);
+    const cloudflareAnswer = parseAnswer(results.cloudflare);
+    const groqAnswer = parseAnswer(results.groq);
     
     showStatus(`🤖 OpenRouter: ${openrouterAnswer !== null ? openrouterAnswer + 1 : 'no answer'}`, 'info');
     showStatus(`🤖 DeepSeek: ${deepseekAnswer !== null ? deepseekAnswer + 1 : 'no answer'}`, 'info');
     showStatus(`🤖 Vercel: ${vercelAnswer !== null ? vercelAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 OpenCode Zen: ${opencodezenAnswer !== null ? opencodezenAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 Cloudflare: ${cloudflareAnswer !== null ? cloudflareAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 Groq: ${groqAnswer !== null ? groqAnswer + 1 : 'no answer'}`, 'info');
     
     // Count votes for each answer
     const votes = {};
     if (openrouterAnswer !== null) votes[openrouterAnswer] = (votes[openrouterAnswer] || 0) + 1;
     if (deepseekAnswer !== null) votes[deepseekAnswer] = (votes[deepseekAnswer] || 0) + 1;
     if (vercelAnswer !== null) votes[vercelAnswer] = (votes[vercelAnswer] || 0) + 1;
+    if (opencodezenAnswer !== null) votes[opencodezenAnswer] = (votes[opencodezenAnswer] || 0) + 1;
+    if (cloudflareAnswer !== null) votes[cloudflareAnswer] = (votes[cloudflareAnswer] || 0) + 1;
+    if (groqAnswer !== null) votes[groqAnswer] = (votes[groqAnswer] || 0) + 1;
     
     // Find the answer with most votes
     let bestAnswer = null;
@@ -581,8 +652,8 @@ If there's no clear question, respond with "NO_QUESTION".`;
       }
     }
     
-    // If majority agrees (2 or more votes)
-    if (bestVotes >= 2) {
+    // If majority agrees (4 or more votes out of 6)
+    if (bestVotes >= 4) {
       showStatus(`✅ ${bestVotes} AIs agree on answer!`, 'success');
       return bestAnswer;
     }
@@ -601,6 +672,21 @@ If there's no clear question, respond with "NO_QUESTION".`;
     if (vercelAnswer !== null) {
       showStatus('✅ Using Vercel answer', 'success');
       return vercelAnswer;
+    }
+    
+    if (opencodezenAnswer !== null) {
+      showStatus('✅ Using OpenCode Zen answer', 'success');
+      return opencodezenAnswer;
+    }
+    
+    if (cloudflareAnswer !== null) {
+      showStatus('✅ Using Cloudflare answer', 'success');
+      return cloudflareAnswer;
+    }
+    
+    if (groqAnswer !== null) {
+      showStatus('✅ Using Groq answer', 'success');
+      return groqAnswer;
     }
     
     showStatus('❌ No AI could determine answer', 'error');
@@ -1226,6 +1312,10 @@ Respond with just the answer text, nothing else.`;
         <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cloudflare API Key:</label>
         <input type="password" id="wg_cloudflare_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.cloudflare}" placeholder="cf-...">
       </div>
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Groq API Key:</label>
+        <input type="password" id="wg_groq_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.groq}" placeholder="gsk-...">
+      </div>
       <div style="text-align: right; margin-top: 20px;">
         <button id="wg_save_keys" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
         <button id="wg_cancel_keys" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cancel</button>
@@ -1249,7 +1339,8 @@ Respond with just the answer text, nothing else.`;
       const vercelKey = document.getElementById('wg_vercel_key').value.trim();
       const opencodezenKey = document.getElementById('wg_opencodezen_key').value.trim();
       const cloudflareKey = document.getElementById('wg_cloudflare_key').value.trim();
-      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey, opencodezen: opencodezenKey, cloudflare: cloudflareKey });
+      const groqKey = document.getElementById('wg_groq_key').value.trim();
+      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey, opencodezen: opencodezenKey, cloudflare: cloudflareKey, groq: groqKey });
       dialog.remove();
       showStatus('API keys saved!', 'success');
     };
@@ -1269,6 +1360,7 @@ Respond with just the answer text, nothing else.`;
     const vercelInput = document.getElementById('wg_vercel_key');
     const opencodezenInput = document.getElementById('wg_opencodezen_key');
     const cloudflareInput = document.getElementById('wg_cloudflare_key');
+    const groqInput = document.getElementById('wg_groq_key');
     
     if (saveBtn) saveBtn.onclick = saveHandler;
     if (cancelBtn) cancelBtn.onclick = cancelHandler;
@@ -1285,6 +1377,7 @@ Respond with just the answer text, nothing else.`;
     if (vercelInput) vercelInput.addEventListener('keypress', enterHandler);
     if (opencodezenInput) opencodezenInput.addEventListener('keypress', enterHandler);
     if (cloudflareInput) cloudflareInput.addEventListener('keypress', enterHandler);
+    if (groqInput) groqInput.addEventListener('keypress', enterHandler);
     
     // Close on escape
     const escHandler = (e) => {

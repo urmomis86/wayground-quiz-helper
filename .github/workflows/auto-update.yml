@@ -1,0 +1,48 @@
+name: Auto-Update Script Version
+on:
+  push:
+    branches: [ main ]
+  paths:
+      - 'wayground-userscript.user.js'
+
+jobs:
+  auto-version:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Auto-bump version
+      run: |
+        # Get current version
+        CURRENT_VERSION=$(grep -o '@version\s\+[0-9.]\+' wayground-userscript.user.js | grep -o '[0-9.]\+')
+        echo "Current version: $CURRENT_VERSION"
+        
+        # Increment version
+        IFS='.' read -ra ADDR <<< "$CURRENT_VERSION"
+        ADDR[2]=$((${ADDR[2]} + 1))
+        NEW_VERSION="${ADDR[0]}.${ADDR[1]}.${ADDR[2]}"
+        
+        echo "New version: $NEW_VERSION"
+        
+        # Update version in file
+        sed -i "s/@version\s\+[0-9.]\+/@version $NEW_VERSION/" wayground-userscript.user.js
+        
+        # Commit and push
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add wayground-userscript.user.js
+        git commit -m "Auto-bump version to $NEW_VERSION"
+        git push
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ env.NEW_VERSION }}
+        release_name: Version ${{ env.NEW_VERSION }}
+        draft: false
+        prerelease: false

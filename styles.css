@@ -1,0 +1,72 @@
+.highlight-correct {
+  border: 4px solid #2ecc71 !important;
+  background: linear-gradient(135deg, #d4f8d4 0%, #a8e6cf 100%) !important;
+  box-shadow: 0 0 20px rgba(46, 204, 113, 0.75);
+  border-radius: 12px;
+  transform: scale(1.02);
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 999;
+}
+
+.highlight-correct::after {
+  content: "✔ Correct";
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background-color: #2ecc71;
+  color: white;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+#qaf-status {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1f2937;
+  color: #ffffff;
+  font: 12px/1.35 Arial, sans-serif;
+  z-index: 2147483647;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  pointer-events: none;
+  white-space: pre-line;
+  display: none;
+}
+
+#qaf-status[data-level="ok"] {
+  background: #0b7a45;
+}
+
+#qaf-status[data-level="warn"] {
+  background: #b65c00;
+}
+
+#qaf-status[data-level="error"] {
+  background: #b00020;
+}
+
+#qaf-status[data-level="info"] {
+  background: #1f2937;
+}
+
+#qaf-image-note {
+  position: fixed;
+  right: 12px;
+  bottom: 116px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #3b1f1f;
+  color: #ffffff;
+  font: 12px/1.35 Arial, sans-serif;
+  z-index: 2147483645;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  display: none;
+}
