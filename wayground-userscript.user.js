@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper with RL
 // @namespace    http://tampermonkey.net/
-// @version      5.2
+// @version      5.9
 // @license      MIT
 // @description  Auto-answer quiz questions with Reinforcement Learning on any site
 // @author       You
@@ -109,21 +109,15 @@
   function getAPIKeys() {
     return {
       openrouter: GM_getValue('openrouter_key', ''),
-      deepseek: GM_getValue('deepseek_key', ''),
-      vercel: GM_getValue('vercel_key', ''),
-      opencodezen: GM_getValue('opencodezen_key', ''),
-      cloudflare: GM_getValue('cloudflare_key', ''),
-      groq: GM_getValue('groq_key', '')
+      mistral: GM_getValue('mistral_key', ''),
+      cohere: GM_getValue('cohere_key', '')
     };
   }
   
   function saveAPIKeys(keys) {
     GM_setValue('openrouter_key', keys.openrouter);
-    GM_setValue('deepseek_key', keys.deepseek);
-    GM_setValue('vercel_key', keys.vercel);
-    GM_setValue('opencodezen_key', keys.opencodezen);
-    GM_setValue('cloudflare_key', keys.cloudflare);
-    GM_setValue('groq_key', keys.groq);
+    GM_setValue('mistral_key', keys.mistral);
+    GM_setValue('cohere_key', keys.cohere);
   }
   
   // Status display
@@ -396,18 +390,61 @@ ${pageContent.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 PAGE CONTENT:
 ${pageContent.bodyText.substring(0, 2000)}
 
-Based on this content, what is the correct answer? 
+IMPORTANT INSTRUCTIONS:
+1. Analyze the question carefully
+2. Determine the correct answer based on your knowledge
+3. Look at the DETECTED OPTIONS above - each option has a number (1, 2, 3, etc.) and text
+4. Find which option TEXT matches your answer
+5. Respond with ONLY the NUMBER of that option (1, 2, 3, etc.)
+6. Do NOT include any text, explanation, or punctuation
+7. Do NOT write "The answer is" or the answer text itself
+8. ONLY output the number: 1 OR 2 OR 3 OR 4 (whichever option is correct)
 
-If you can identify a clear question and multiple choice options, respond with JUST the number of the correct option (1, 2, 3, etc.).
+Example:
+If options are:
+1. Paris
+2. London  
+3. Berlin
+4. Madrid
 
-If you're not sure, respond with "UNCERTAIN".
+And the correct answer is "Paris", you MUST respond with: 1
 
-If there's no clear question, respond with "NO_QUESTION".`;
+Example correct responses:
+- 2
+- 4
+- 1
 
+If you cannot determine the answer, respond with: UNCERTAIN
+If there is no clear question, respond with: NO_QUESTION
+
+Your answer (just the number):`;
+
+    // Helper function to call AI with timeout and detailed error logging
+    const callAI = async (name, apiCallFn, timeout = 10000) => {
+      try {
+        return await Promise.race([
+          apiCallFn(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`${name} timeout`)), timeout)
+          )
+        ]);
+      } catch (err) {
+        console.error(`[${name}] FAILED:`, err.message);
+        if (err.response) {
+          console.error(`[${name}] Response status:`, err.response.status);
+        }
+        showStatus(`❌ ${name}: ${err.message}`, 'error');
+        return null;
+      }
+    };
+    
+    // Run all AIs in parallel with individual error handling
+    const promises = [];
+    
     // Call OpenRouter
     if (keys.openrouter) {
-      showStatus('🌐 OpenRouter analyzing screen...', 'info');
-      try {
+      promises.push(callAI('OpenRouter', async () => {
+        showStatus('🌐 OpenRouter analyzing...', 'info');
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -418,7 +455,7 @@ If there's no clear question, respond with "NO_QUESTION".`;
           body: JSON.stringify({
             model: 'openrouter/free',
             messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.' },
               { role: 'user', content: prompt }
             ],
             max_tokens: 100
@@ -428,162 +465,79 @@ If there's no clear question, respond with "NO_QUESTION".`;
         const data = await response.json();
         const answer = data.choices?.[0]?.message?.content?.trim();
         results.openrouter = answer;
-        showStatus('✅ OpenRouter analyzed screen', 'success');
-      } catch (error) {
-        console.error('OpenRouter error:', error);
-        showStatus('❌ OpenRouter failed', 'error');
-      }
+        showStatus('✅ OpenRouter: ' + (answer || 'no answer'), 'success');
+        return answer;
+      }));
     }
     
-    // Call DeepSeek
-    if (keys.deepseek) {
-      showStatus('🌐 DeepSeek analyzing screen...', 'info');
-      try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
+    // Call Mistral AI
+    if (keys.mistral) {
+      promises.push(callAI('Mistral', async () => {
+        showStatus('🌐 Mistral analyzing...', 'info');
+        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.deepseek}`
+            'Authorization': `Bearer ${keys.mistral}`
           },
           body: JSON.stringify({
-            model: 'deepseek-chat',
+            model: 'mistral-tiny',
             messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
+              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.' },
               { role: 'user', content: prompt }
             ],
             max_tokens: 100
           })
         });
         
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Mistral HTTP ${response.status}:`, errorText);
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
         const answer = data.choices?.[0]?.message?.content?.trim();
-        results.deepseek = answer;
-        showStatus('✅ DeepSeek analyzed screen', 'success');
-      } catch (error) {
-        console.error('DeepSeek error:', error);
-        showStatus('❌ DeepSeek failed', 'error');
-      }
+        results.mistral = answer;
+        showStatus('✅ Mistral: ' + (answer || 'no answer'), 'success');
+        return answer;
+      }));
     }
     
-    // Call Vercel AI
-    if (keys.vercel) {
-      showStatus('🌐 Vercel AI analyzing screen...', 'info');
-      try {
-        const response = await fetch('https://api.vercel.ai/v1/chat/completions', {
+    // Call Cohere AI
+    if (keys.cohere) {
+      promises.push(callAI('Cohere', async () => {
+        showStatus('🌐 Cohere analyzing...', 'info');
+        const response = await fetch('https://api.cohere.ai/v1/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.vercel}`
+            'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'vercel/gpt-4o',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
-              { role: 'user', content: prompt }
-            ],
+            model: 'command-r',
+            message: prompt,
+            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.',
             max_tokens: 100
           })
         });
         
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.vercel = answer;
-        showStatus('✅ Vercel AI analyzed screen', 'success');
-      } catch (error) {
-        console.error('Vercel AI error:', error);
-        showStatus('❌ Vercel AI failed', 'error');
-      }
-    }
-    
-    // Call OpenCode Zen AI
-    if (keys.opencodezen) {
-      showStatus('🌐 OpenCode Zen analyzing screen...', 'info');
-      try {
-        const response = await fetch('https://api.opencodezen.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.opencodezen}`
-          },
-          body: JSON.stringify({
-            model: 'opencodezen/gpt-4',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 100
-          })
-        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Cohere HTTP ${response.status}:`, errorText);
+          throw new Error(`HTTP ${response.status}`);
+        }
         
         const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.opencodezen = answer;
-        showStatus('✅ OpenCode Zen analyzed screen', 'success');
-      } catch (error) {
-        console.error('OpenCode Zen error:', error);
-        showStatus('❌ OpenCode Zen failed', 'error');
-      }
+        const answer = data.text?.trim();
+        results.cohere = answer;
+        showStatus('✅ Cohere: ' + (answer || 'no answer'), 'success');
+        return answer;
+      }));
     }
     
-    // Call Cloudflare AI
-    if (keys.cloudflare) {
-      showStatus('🌐 Cloudflare analyzing screen...', 'info');
-      try {
-        const response = await fetch('https://api.cloudflare.com/client/v4/ai/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.cloudflare}`
-          },
-          body: JSON.stringify({
-            model: 'cf/meta-llama/llama-3.1-8b-instruct',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 100
-          })
-        });
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.cloudflare = answer;
-        showStatus('✅ Cloudflare analyzed screen', 'success');
-      } catch (error) {
-        console.error('Cloudflare error:', error);
-        showStatus('❌ Cloudflare failed', 'error');
-      }
-    }
-    
-    // Call Groq AI
-    if (keys.groq) {
-      showStatus('🌐 Groq analyzing screen...', 'info');
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.groq}`
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant that analyzes web pages and answers quiz questions. Read the full page content carefully and identify the question and correct answer.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 100
-          })
-        });
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.groq = answer;
-        showStatus('✅ Groq analyzed screen', 'success');
-      } catch (error) {
-        console.error('Groq error:', error);
-        showStatus('❌ Groq failed', 'error');
-      }
-    }
+    // Wait for AI to complete (or timeout)
+    await Promise.all(promises);
     
     return results;
   }
@@ -610,7 +564,7 @@ If there's no clear question, respond with "NO_QUESTION".`;
   async function getConsensusAnswer(pageContent, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.deepseek && !keys.vercel && !keys.opencodezen && !keys.cloudflare && !keys.groq) {
+    if (!keys.openrouter && !keys.mistral && !keys.cohere) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
@@ -620,27 +574,18 @@ If there's no clear question, respond with "NO_QUESTION".`;
     const results = await getAnswerWithContext(pageContent, keys);
     
     const openrouterAnswer = parseAnswer(results.openrouter);
-    const deepseekAnswer = parseAnswer(results.deepseek);
-    const vercelAnswer = parseAnswer(results.vercel);
-    const opencodezenAnswer = parseAnswer(results.opencodezen);
-    const cloudflareAnswer = parseAnswer(results.cloudflare);
-    const groqAnswer = parseAnswer(results.groq);
+    const mistralAnswer = parseAnswer(results.mistral);
+    const cohereAnswer = parseAnswer(results.cohere);
     
     showStatus(`🤖 OpenRouter: ${openrouterAnswer !== null ? openrouterAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 DeepSeek: ${deepseekAnswer !== null ? deepseekAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 Vercel: ${vercelAnswer !== null ? vercelAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 OpenCode Zen: ${opencodezenAnswer !== null ? opencodezenAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 Cloudflare: ${cloudflareAnswer !== null ? cloudflareAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 Groq: ${groqAnswer !== null ? groqAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 Mistral: ${mistralAnswer !== null ? mistralAnswer + 1 : 'no answer'}`, 'info');
+    showStatus(`🤖 Cohere: ${cohereAnswer !== null ? cohereAnswer + 1 : 'no answer'}`, 'info');
     
     // Count votes for each answer
     const votes = {};
     if (openrouterAnswer !== null) votes[openrouterAnswer] = (votes[openrouterAnswer] || 0) + 1;
-    if (deepseekAnswer !== null) votes[deepseekAnswer] = (votes[deepseekAnswer] || 0) + 1;
-    if (vercelAnswer !== null) votes[vercelAnswer] = (votes[vercelAnswer] || 0) + 1;
-    if (opencodezenAnswer !== null) votes[opencodezenAnswer] = (votes[opencodezenAnswer] || 0) + 1;
-    if (cloudflareAnswer !== null) votes[cloudflareAnswer] = (votes[cloudflareAnswer] || 0) + 1;
-    if (groqAnswer !== null) votes[groqAnswer] = (votes[groqAnswer] || 0) + 1;
+    if (mistralAnswer !== null) votes[mistralAnswer] = (votes[mistralAnswer] || 0) + 1;
+    if (cohereAnswer !== null) votes[cohereAnswer] = (votes[cohereAnswer] || 0) + 1;
     
     // Find the answer with most votes
     let bestAnswer = null;
@@ -652,8 +597,8 @@ If there's no clear question, respond with "NO_QUESTION".`;
       }
     }
     
-    // If majority agrees (4 or more votes out of 6)
-    if (bestVotes >= 4) {
+    // If majority agrees (2+ out of 3)
+    if (bestVotes >= 2) {
       showStatus(`✅ ${bestVotes} AIs agree on answer!`, 'success');
       return bestAnswer;
     }
@@ -664,29 +609,14 @@ If there's no clear question, respond with "NO_QUESTION".`;
       return openrouterAnswer;
     }
     
-    if (deepseekAnswer !== null) {
-      showStatus('✅ Using DeepSeek answer', 'success');
-      return deepseekAnswer;
+    if (mistralAnswer !== null) {
+      showStatus('✅ Using Mistral answer', 'success');
+      return mistralAnswer;
     }
     
-    if (vercelAnswer !== null) {
-      showStatus('✅ Using Vercel answer', 'success');
-      return vercelAnswer;
-    }
-    
-    if (opencodezenAnswer !== null) {
-      showStatus('✅ Using OpenCode Zen answer', 'success');
-      return opencodezenAnswer;
-    }
-    
-    if (cloudflareAnswer !== null) {
-      showStatus('✅ Using Cloudflare answer', 'success');
-      return cloudflareAnswer;
-    }
-    
-    if (groqAnswer !== null) {
-      showStatus('✅ Using Groq answer', 'success');
-      return groqAnswer;
+    if (cohereAnswer !== null) {
+      showStatus('✅ Using Cohere answer', 'success');
+      return cohereAnswer;
     }
     
     showStatus('❌ No AI could determine answer', 'error');
@@ -697,7 +627,7 @@ If there's no clear question, respond with "NO_QUESTION".`;
   async function getBothAIAnswersWithRetry(question, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.deepseek) {
+    if (!keys.openrouter && !keys.mistral && !keys.cohere) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
@@ -1293,28 +1223,20 @@ Respond with just the answer text, nothing else.`;
     dialog.innerHTML = `
       <h3 style="margin: 0 0 15px 0; color: #007acc;">API Keys Settings</h3>
       <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">OpenRouter API Key:</label>
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">OpenRouter API Key (Recommended):</label>
         <input type="password" id="wg_openrouter_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.openrouter}" placeholder="sk-or-v1-...">
       </div>
       <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">DeepSeek API Key:</label>
-        <input type="password" id="wg_deepseek_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.deepseek}" placeholder="sk-...">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Mistral API Key:</label>
+        <input type="password" id="wg_mistral_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.mistral}" placeholder="...">
       </div>
       <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Vercel AI API Key:</label>
-        <input type="password" id="wg_vercel_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.vercel}" placeholder="vercel-...">
+        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cohere API Key:</label>
+        <input type="password" id="wg_cohere_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.cohere}" placeholder="...">
       </div>
-      <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">OpenCode Zen API Key:</label>
-        <input type="password" id="wg_opencodezen_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.opencodezen}" placeholder="ocz-...">
-      </div>
-      <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cloudflare API Key:</label>
-        <input type="password" id="wg_cloudflare_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.cloudflare}" placeholder="cf-...">
-      </div>
-      <div style="margin-bottom: 15px;">
-        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Groq API Key:</label>
-        <input type="password" id="wg_groq_key" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" value="${keys.groq}" placeholder="gsk-...">
+      <div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px;">
+        <button id="wg_test_apis" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%;">🧪 Test All APIs</button>
+        <div id="wg_test_results" style="margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto;"></div>
       </div>
       <div style="text-align: right; margin-top: 20px;">
         <button id="wg_save_keys" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
@@ -1335,12 +1257,9 @@ Respond with just the answer text, nothing else.`;
       e.preventDefault();
       e.stopPropagation();
       const openrouterKey = document.getElementById('wg_openrouter_key').value.trim();
-      const deepseekKey = document.getElementById('wg_deepseek_key').value.trim();
-      const vercelKey = document.getElementById('wg_vercel_key').value.trim();
-      const opencodezenKey = document.getElementById('wg_opencodezen_key').value.trim();
-      const cloudflareKey = document.getElementById('wg_cloudflare_key').value.trim();
-      const groqKey = document.getElementById('wg_groq_key').value.trim();
-      saveAPIKeys({ openrouter: openrouterKey, deepseek: deepseekKey, vercel: vercelKey, opencodezen: opencodezenKey, cloudflare: cloudflareKey, groq: groqKey });
+      const mistralKey = document.getElementById('wg_mistral_key').value.trim();
+      const cohereKey = document.getElementById('wg_cohere_key').value.trim();
+      saveAPIKeys({ openrouter: openrouterKey, mistral: mistralKey, cohere: cohereKey });
       dialog.remove();
       showStatus('API keys saved!', 'success');
     };
@@ -1356,14 +1275,129 @@ Respond with just the answer text, nothing else.`;
     const saveBtn = document.getElementById('wg_save_keys');
     const cancelBtn = document.getElementById('wg_cancel_keys');
     const openrouterInput = document.getElementById('wg_openrouter_key');
-    const deepseekInput = document.getElementById('wg_deepseek_key');
-    const vercelInput = document.getElementById('wg_vercel_key');
-    const opencodezenInput = document.getElementById('wg_opencodezen_key');
-    const cloudflareInput = document.getElementById('wg_cloudflare_key');
-    const groqInput = document.getElementById('wg_groq_key');
+    const mistralInput = document.getElementById('wg_mistral_key');
+    const cohereInput = document.getElementById('wg_cohere_key');
     
     if (saveBtn) saveBtn.onclick = saveHandler;
     if (cancelBtn) cancelBtn.onclick = cancelHandler;
+    
+    // Test APIs handler
+    const testBtn = document.getElementById('wg_test_apis');
+    const testResultsDiv = document.getElementById('wg_test_results');
+    
+    if (testBtn) {
+      testBtn.onclick = async () => {
+        testResultsDiv.innerHTML = '<div style="color: #007acc;">🧪 Testing APIs...</div>';
+        testBtn.disabled = true;
+        
+        const testPrompt = 'What is 2+2? Answer with ONLY the number.';
+        const results = [];
+        
+        // Test OpenRouter
+        const openrouterKey = document.getElementById('wg_openrouter_key').value.trim();
+        if (openrouterKey) {
+          try {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${openrouterKey}`,
+                'HTTP-Referer': 'https://openrouter.ai/'
+              },
+              body: JSON.stringify({
+                model: 'openrouter/free',
+                messages: [
+                  { role: 'system', content: 'You are a helpful assistant.' },
+                  { role: 'user', content: testPrompt }
+                ],
+                max_tokens: 10
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const answer = data.choices?.[0]?.message?.content?.trim();
+              results.push(`✅ <b>OpenRouter:</b> Working (answered: "${answer}")`);
+            } else {
+              results.push(`❌ <b>OpenRouter:</b> HTTP ${response.status}`);
+            }
+          } catch (err) {
+            results.push(`❌ <b>OpenRouter:</b> ${err.message}`);
+          }
+        } else {
+          results.push(`⚠️ <b>OpenRouter:</b> No API key`);
+        }
+        
+        // Test Mistral
+        const mistralKey = document.getElementById('wg_mistral_key').value.trim();
+        if (mistralKey) {
+          try {
+            const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${mistralKey}`
+              },
+              body: JSON.stringify({
+                model: 'mistral-tiny',
+                messages: [
+                  { role: 'system', content: 'You are a helpful assistant.' },
+                  { role: 'user', content: testPrompt }
+                ],
+                max_tokens: 10
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const answer = data.choices?.[0]?.message?.content?.trim();
+              results.push(`✅ <b>Mistral:</b> Working (answered: "${answer}")`);
+            } else {
+              results.push(`❌ <b>Mistral:</b> HTTP ${response.status}`);
+            }
+          } catch (err) {
+            results.push(`❌ <b>Mistral:</b> ${err.message}`);
+          }
+        } else {
+          results.push(`⚠️ <b>Mistral:</b> No API key`);
+        }
+        
+        // Test Cohere
+        const cohereKey = document.getElementById('wg_cohere_key').value.trim();
+        if (cohereKey) {
+          try {
+            const response = await fetch('https://api.cohere.ai/v1/chat', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${cohereKey}`
+              },
+              body: JSON.stringify({
+                model: 'command-r',
+                message: testPrompt,
+                preamble: 'You are a helpful assistant.',
+                max_tokens: 10
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const answer = data.text?.trim();
+              results.push(`✅ <b>Cohere:</b> Working (answered: "${answer}")`);
+            } else {
+              results.push(`❌ <b>Cohere:</b> HTTP ${response.status}`);
+            }
+          } catch (err) {
+            results.push(`❌ <b>Cohere:</b> ${err.message}`);
+          }
+        } else {
+          results.push(`⚠️ <b>Cohere:</b> No API key`);
+        }
+        
+        testResultsDiv.innerHTML = results.join('<br>');
+        testBtn.disabled = false;
+      };
+    }
     
     // Save on Enter key in input fields
     const enterHandler = (e) => {
@@ -1373,11 +1407,8 @@ Respond with just the answer text, nothing else.`;
     };
     
     if (openrouterInput) openrouterInput.addEventListener('keypress', enterHandler);
-    if (deepseekInput) deepseekInput.addEventListener('keypress', enterHandler);
-    if (vercelInput) vercelInput.addEventListener('keypress', enterHandler);
-    if (opencodezenInput) opencodezenInput.addEventListener('keypress', enterHandler);
-    if (cloudflareInput) cloudflareInput.addEventListener('keypress', enterHandler);
-    if (groqInput) groqInput.addEventListener('keypress', enterHandler);
+    if (mistralInput) mistralInput.addEventListener('keypress', enterHandler);
+    if (cohereInput) cohereInput.addEventListener('keypress', enterHandler);
     
     // Close on escape
     const escHandler = (e) => {
