@@ -9,6 +9,10 @@
 // @match        https://*.wayground.com/*
 // @match        https://wayground.com/join/*
 // @match        https://*.wayground.com/join/*
+// @match        https://nitrotype.com/*
+// @match        https://www.nitrotype.com/*
+// @match        https://nitrotype.com/race/*
+// @match        https://www.nitrotype.com/race/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
