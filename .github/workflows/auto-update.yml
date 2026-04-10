@@ -1,48 +1,74 @@
-name: Auto-Update Script Version
+name: Validate and Release
+
 on:
   push:
     branches: [ main ]
-  paths:
+    paths:
       - 'wayground-userscript.user.js'
+      - 'CHANGELOG.md'
+
+# Prevent concurrent runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  auto-version:
+  validate:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Auto-bump version
+    - name: Get version from script
+      id: get_version
       run: |
-        # Get current version
-        CURRENT_VERSION=$(grep -o '@version\s\+[0-9.]\+' wayground-userscript.user.js | grep -o '[0-9.]\+')
-        echo "Current version: $CURRENT_VERSION"
-        
-        # Increment version
-        IFS='.' read -ra ADDR <<< "$CURRENT_VERSION"
-        ADDR[2]=$((${ADDR[2]} + 1))
-        NEW_VERSION="${ADDR[0]}.${ADDR[1]}.${ADDR[2]}"
-        
-        echo "New version: $NEW_VERSION"
-        
-        # Update version in file
-        sed -i "s/@version\s\+[0-9.]\+/@version $NEW_VERSION/" wayground-userscript.user.js
-        
-        # Commit and push
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add wayground-userscript.user.js
-        git commit -m "Auto-bump version to $NEW_VERSION"
-        git push
+        VERSION=$(grep -oP '@version\s+\K[0-9.]+' wayground-userscript.user.js)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Script version: $VERSION"
+
+    - name: Validate version format
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: $VERSION"
+          exit 1
+        fi
+        echo "✅ Version format valid: $VERSION"
+
+    - name: Check CHANGELOG updated
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        if ! grep -q "$VERSION" CHANGELOG.md; then
+          echo "⚠️ Version $VERSION not found in CHANGELOG.md"
+        else
+          echo "✅ CHANGELOG.md contains version $VERSION"
+        fi
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Create Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ env.NEW_VERSION }}
-        release_name: Version ${{ env.NEW_VERSION }}
+        tag_name: v${{ needs.validate.outputs.version }}
+        name: Version ${{ needs.validate.outputs.version }}
+        body: |
+          ## Wayground Quiz Helper v${{ needs.validate.outputs.version }}
+
+          See [CHANGELOG.md](./CHANGELOG.md) for details.
         draft: false
         prerelease: false
+        files: wayground-userscript.user.js
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
