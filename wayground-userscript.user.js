@@ -698,42 +698,42 @@ Your answer (just the number):`;
       promises.push(openrouterPromise);
     }
     
-    // DeepSeek call with timeout
-    if (keys.deepseek) {
-      const deepseekPromise = Promise.race([
-        fetch('https://api.deepseek.com/chat/completions', {
+    // Cohere call with timeout
+    if (keys.cohere) {
+      const coherePromise = Promise.race([
+        fetch('https://api.cohere.com/v1/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.deepseek}`
+            'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 10,
-            temperature: 0.1
+            model: 'command-light',
+            message: prompt,
+            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.',
+            max_tokens: 100
           })
         }).then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const data = await response.json();
-          const answer = data.choices?.[0]?.message?.content?.trim();
-          console.log('DeepSeek raw:', answer);
+          const answer = data.text?.trim();
+          console.log('Cohere raw:', answer);
           const match = answer.match(/\d+/);
           const num = match ? parseInt(match[0]) : NaN;
-          console.log('DeepSeek parsed:', num);
+          console.log('Cohere parsed:', num);
           if (num >= 1 && num <= options.length) {
-            showStatus(`✅ DeepSeek: ${num}`, 'success');
-            return { source: 'deepseek', answer: num, valid: true };
+            showStatus(`✅ Cohere: ${num}`, 'success');
+            return { source: 'cohere', answer: num, valid: true };
           }
           throw new Error('Invalid answer format');
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
       ]).catch(err => {
-        console.error('DeepSeek error:', err.message);
-        showStatus('❌ DeepSeek failed', 'error');
-        return { source: 'deepseek', answer: null, valid: false };
+        console.error('Cohere error:', err.message);
+        showStatus('❌ Cohere failed', 'error');
+        return { source: 'cohere', answer: null, valid: false };
       });
-      promises.push(deepseekPromise);
+      promises.push(coherePromise);
     }
     
     // Wait for results
@@ -798,36 +798,36 @@ Your answer (just the number):`;
       }
     }
     
-    // Try DeepSeek
-    if (keys.deepseek) {
+    // Try Cohere fallback
+    if (keys.cohere) {
       try {
-        showStatus('🔄 Trying DeepSeek fallback...', 'info');
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
+        showStatus('🔄 Trying Cohere fallback...', 'info');
+        const response = await fetch('https://api.cohere.com/v1/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.deepseek}`
+            'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 10,
-            temperature: 0.1
+            model: 'command-light',
+            message: prompt,
+            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct.',
+            max_tokens: 100
           })
         });
         
         if (!response.ok) throw new Error('Failed');
         const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
+        const answer = data.text?.trim();
         const match = answer.match(/\d+/);
         const num = match ? parseInt(match[0]) : NaN;
         
         if (num >= 1 && num <= options.length) {
-          showStatus(`✅ Fallback DeepSeek: ${num}`, 'success');
+          showStatus(`✅ Fallback Cohere: ${num}`, 'success');
           return num - 1;
         }
       } catch (e) {
-        console.error('Fallback DeepSeek failed:', e);
+        console.error('Fallback Cohere failed:', e);
       }
     }
     
@@ -874,32 +874,33 @@ Respond with just the answer text, nothing else.`;
       }
     }
     
-    // Try DeepSeek
-    if (keys.deepseek) {
-      showStatus('🌐 DeepSeek generating text answer...', 'info');
+    // Try Cohere
+    if (keys.cohere) {
+      showStatus('🌐 Cohere generating text answer...', 'info');
       try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
+        const response = await fetch('https://api.cohere.com/v1/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.deepseek}`
+            'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: prompt }],
+            model: 'command-light',
+            message: prompt,
+            preamble: 'You are a helpful assistant. Provide concise, accurate answers.',
             max_tokens: 150
           })
         });
         
         const data = await response.json();
-        answer = data.choices?.[0]?.message?.content?.trim();
-        console.log('DeepSeek text answer:', answer);
+        answer = data.text?.trim();
+        console.log('Cohere text answer:', answer);
         if (answer) {
-          showStatus('✅ DeepSeek generated answer', 'success');
+          showStatus('✅ Cohere generated answer', 'success');
           return answer;
         }
       } catch (error) {
-        console.error('DeepSeek text generation error:', error);
+        console.error('Cohere text generation error:', error);
       }
     }
     
@@ -1001,7 +1002,7 @@ Respond with just the answer text, nothing else.`;
       showStatus(`⌨️ Found ${textInputs.length} text input(s)`, 'info');
       
       const keys = getAPIKeys();
-      if (!keys.openrouter && !keys.deepseek) {
+      if (!keys.openrouter && !keys.cohere) {
         showStatus('⚠️ Set API keys to answer text questions', 'error');
         return;
       }
