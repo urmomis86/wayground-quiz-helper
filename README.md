@@ -11,14 +11,15 @@ A Tampermonkey userscript that uses multiple AI models to automatically answer q
 - **Visual Detection**: Highlights selected answers with green border and auto-clicks
 - **Multiple Question Types**: Supports radio buttons, checkboxes, and text inputs
 - **Easy Configuration**: Simple menu to add API keys
-- **Auto-Copy**: Built-in feature to copy updated script to Downloads
 
 ## Installation
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension
-2. Open the userscript file (`wayground-userscript-v*.user.js`) in the Downloads folder
-3. Tampermonkey will prompt you to install - click **Install**
-4. The script will automatically run on Wayground quiz pages
+1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension for your browser
+2. Click this link to install the script: **[Install Wayground Quiz Helper](https://raw.githubusercontent.com/urmomis86/wayground-quiz-helper/main/wayground-userscript.user.js)**
+   - Or manually: Copy the `wayground-userscript.user.js` file contents
+   - In Tampermonkey dashboard, click "Create a new script"
+   - Paste the contents and save (Ctrl+S)
+3. Navigate to any Wayground quiz page - the script will activate automatically
 
 ## Setup
 
@@ -44,22 +45,23 @@ A Tampermonkey userscript that uses multiple AI models to automatically answer q
 
 - **🛑 Pause/▶️ Resume Script**: Temporarily disable or re-enable the script
 - **🔑 API Keys**: Open the settings dialog to configure API keys
-- **📋 Copy Script**: Save the current script version to your Downloads folder
+- **📋 Copy Script**: Export the current script to a file for backup
 
 ## How It Works
 
 1. **Page Analysis**: The script extracts question text and all answer options from the page
 2. **Multi-AI Query**: Sends the question to all configured AI providers simultaneously
 3. **Answer Parsing**: Each AI returns a number (1-N) representing their answer choice
-4. **Consensus Voting**: The answer with 4 or more AI votes is selected
+4. **Consensus Voting**: Both AIs must agree on the same answer for high confidence
 5. **Auto-Selection**: The winning answer is highlighted in green and clicked automatically
 6. **Fallback**: If no consensus is reached, the first available AI answer is used
 
 ## Troubleshooting
 
 ### "Set API keys in settings" Error
-- Add at least one API key in the settings dialog
-- Groq and OpenRouter both offer free tiers that work great
+- Add at least one API key in the settings dialog (⚙️ Menu → 🔑 API Keys)
+- OpenRouter offers free models that work great
+- Cohere provides trial keys for testing
 
 ### "No AI could determine answer" Error
 - Check that your API keys are valid and have credits
@@ -73,14 +75,10 @@ A Tampermonkey userscript that uses multiple AI models to automatically answer q
 
 ## API Costs
 
-- **Free options**: OpenRouter (free tier), Groq (includes free credits)
-- **Paid options**: DeepSeek, Vercel, Cloudflare, OpenCode Zen
-- Costs vary by provider and model used
-- The script uses efficient models to minimize costs
-
-## License
-
-MIT License
+- **OpenRouter**: Free tier available (limited requests per day)
+- **Cohere**: Trial key available with free credits
+- The script uses lightweight models to minimize API costs
+- Both AIs are called simultaneously for consensus
 
 ## Version History
 
