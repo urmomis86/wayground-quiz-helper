@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.1.0
+// @version      6.1.1
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -657,8 +657,8 @@ Your answer (just the number):`;
       return null;
     }
     
-    // Build enhanced prompt with clear formatting
-    const prompt = `You are answering a multiple choice quiz question. Your task is to select the correct answer.
+    // Build enhanced prompt with chain-of-thought reasoning for better accuracy
+    const prompt = `You are answering a multiple choice quiz question. Think step-by-step before answering.
 
 QUESTION:
 ${question}
@@ -666,16 +666,21 @@ ${question}
 OPTIONS:
 ${options.map((opt, i) => `  [${i + 1}] ${opt.text}`).join('\n')}
 
-INSTRUCTIONS:
-1. Carefully read the question and all options
-2. Select the SINGLE best answer
-3. Respond with ONLY the option number (1-${options.length})
-4. Do NOT include any text, explanations, or punctuation
+THINKING PROCESS:
+1. Analyze what the question is asking for
+2. Evaluate each option:
+${options.map((opt, i) => `   - Option [${i + 1}] "${opt.text}": ${i === 0 ? 'Could this be correct?' : 'Is this better or worse than option [1]?'}`).join('\n')}
+3. Determine which option is most accurate
+4. Select your final answer
 
-Example correct responses:
-- If option [1] is correct, respond: 1
-- If option [2] is correct, respond: 2
-- If option [3] is correct, respond: 3
+FINAL ANSWER:
+You MUST respond with ONLY a single digit number from 1 to ${options.length}.
+- If option [1] is correct, respond with just: 1
+- If option [2] is correct, respond with just: 2
+- If option [3] is correct, respond with just: 3
+- etc.
+
+Do NOT include any explanation, text, or punctuation. Only the number.
 
 Your answer (single number only):`;
     
@@ -685,41 +690,58 @@ Your answer (single number only):`;
     const promises = [];
     const timeout = 15000; // 15 second timeout
     
-    // OpenRouter call with timeout
+    // OpenRouter call with timeout and rate limit retry
     if (keys.openrouter) {
       const openrouterPromise = Promise.race([
-        fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.openrouter}`,
-            'HTTP-Referer': 'https://openrouter.ai/'
-          },
-          body: JSON.stringify({
-            model: 'openrouter/free',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 10,
-            temperature: 0.1 // Lower temperature for more consistent answers
-          })
-        }).then(async (response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = await response.json();
-          const answer = data.choices?.[0]?.message?.content?.trim();
-          console.log('OpenRouter raw:', answer);
-          // Extract number from answer
-          const match = answer.match(/\d+/);
-          const num = match ? parseInt(match[0]) : NaN;
-          console.log('OpenRouter parsed:', num);
-          if (num >= 1 && num <= options.length) {
-            showStatus(`✅ OpenRouter: ${num}`, 'success');
-            return { source: 'openrouter', answer: num, valid: true };
+        (async () => {
+          let retries = 3;
+          let delay = 2000; // Start with 2 second delay
+          
+          while (retries > 0) {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${keys.openrouter}`,
+                'HTTP-Referer': 'https://openrouter.ai/'
+              },
+              body: JSON.stringify({
+                model: 'mistralai/mistral-7b-instruct:free', // Better free model
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 50, // Increased for reasoning
+                temperature: 0.1
+              })
+            });
+            
+            // Handle rate limit with retry
+            if (response.status === 429) {
+              console.log(`[Wayground] OpenRouter rate limited, retrying in ${delay}ms... (${retries} retries left)`);
+              showStatus(`⏳ OpenRouter rate limit, waiting...`, 'warning');
+              await new Promise(r => setTimeout(r, delay));
+              delay *= 2; // Exponential backoff
+              retries--;
+              continue;
+            }
+            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            const answer = data.choices?.[0]?.message?.content?.trim();
+            console.log('[Wayground Debug] OpenRouter raw:', answer);
+            const match = answer.match(/\d+/);
+            const num = match ? parseInt(match[0]) : NaN;
+            console.log('[Wayground Debug] OpenRouter parsed:', num);
+            if (num >= 1 && num <= options.length) {
+              showStatus(`✅ OpenRouter: ${num}`, 'success');
+              return { source: 'openrouter', answer: num, valid: true };
+            }
+            throw new Error('Invalid answer format');
           }
-          throw new Error('Invalid answer format');
-        }),
+          throw new Error('Rate limit retries exhausted');
+        })(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
       ]).catch(err => {
-        console.error('OpenRouter error:', err.message);
-        showStatus('❌ OpenRouter failed', 'error');
+        console.error('[Wayground Debug] OpenRouter error:', err.message);
+        showStatus(`❌ OpenRouter: ${err.message}`, 'error');
         return { source: 'openrouter', answer: null, valid: false };
       });
       promises.push(openrouterPromise);
@@ -811,9 +833,9 @@ Your answer (single number only):`;
   // Fallback single AI answer
   async function getSingleAIAnswer(question, options) {
     const keys = getAPIKeys();
-    const prompt = `Question: ${question}\n\nOptions:\n${options.map((opt, i) => `${i + 1}. ${opt.text}`).join('\n')}\n\nWhich is correct? Answer with just the number.`;
+    const prompt = `You are answering a multiple choice quiz question.\n\nQUESTION:\n${question}\n\nOPTIONS:\n${options.map((opt, i) => `  [${i + 1}] ${opt.text}`).join('\n')}\n\nRespond with ONLY the option number (1-${options.length}):`;
     
-    // Try OpenRouter first
+    // Try OpenRouter first with better model
     if (keys.openrouter) {
       try {
         showStatus('🔄 Trying OpenRouter fallback...', 'info');
@@ -825,9 +847,9 @@ Your answer (single number only):`;
             'HTTP-Referer': 'https://openrouter.ai/'
           },
           body: JSON.stringify({
-            model: 'openrouter/free',
+            model: 'mistralai/mistral-7b-instruct:free',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 10,
+            max_tokens: 20,
             temperature: 0.1
           })
         });
@@ -835,6 +857,7 @@ Your answer (single number only):`;
         if (!response.ok) throw new Error('Failed');
         const data = await response.json();
         const answer = data.choices?.[0]?.message?.content?.trim();
+        console.log('[Wayground Debug] Fallback OpenRouter raw:', answer);
         const match = answer.match(/\d+/);
         const num = match ? parseInt(match[0]) : NaN;
         
@@ -843,7 +866,7 @@ Your answer (single number only):`;
           return num - 1;
         }
       } catch (e) {
-        console.error('Fallback OpenRouter failed:', e);
+        console.error('[Wayground Debug] Fallback OpenRouter failed:', e);
       }
     }
     

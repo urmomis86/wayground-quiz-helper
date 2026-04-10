@@ -2,6 +2,19 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.1.1] - 2025-04-10
+
+### Fixed
+- **Rate limit handling** - Added retry with exponential backoff for OpenRouter 429 errors
+- **Better AI model** - Changed from `openrouter/free` to `mistralai/mistral-7b-instruct:free` (more accurate)
+- **Chain-of-thought prompting** - AI now reasons through each option before answering
+- **Better answer parsing** - Improved number extraction from AI responses
+
+### Changed
+- **Prompt improvements** - Added "THINKING PROCESS" section for better reasoning
+- **Debug logging** - All AI responses now logged with `[Wayground Debug]` prefix
+- **max_tokens increased** - From 10 to 50 to allow reasoning space
+
 ## [6.1.0] - 2025-04-10
 
 ### Fixed
