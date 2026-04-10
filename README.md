@@ -4,14 +4,10 @@ A Tampermonkey userscript that uses multiple AI models to automatically answer q
 
 ## Features
 
-- **Multi-AI Consensus**: Uses up to 6 different AI providers for maximum accuracy:
+- **Multi-AI Consensus**: Uses 2 AI providers for answer verification:
   - OpenRouter (free models available)
-  - DeepSeek
-  ######  Vercel AI
-  - OpenCode Zen
-  - Cloudflare
-  - Groq (free tier available)
-- **Smart Answer Selection**: AI consensus voting - requires 4 out of 6 AIs to agree
+  - Cohere (trial keys available)
+- **Smart Answer Selection**: AI consensus voting - both AIs must agree for high confidence
 - **Visual Detection**: Highlights selected answers with green border and auto-clicks
 - **Multiple Question Types**: Supports radio buttons, checkboxes, and text inputs
 - **Easy Configuration**: Simple menu to add API keys
@@ -31,11 +27,7 @@ A Tampermonkey userscript that uses multiple AI models to automatically answer q
 3. Select **🔑 API Keys**
 4. Add your API keys for the AI services you want to use:
    - **OpenRouter**: Get free API key at [openrouter.ai/keys](https://openrouter.ai/keys)
-   - **Groq**: Get free API key at [console.groq.com](https://console.groq.com/) (includes free credits)
-   - **DeepSeek**: Get API key at [platform.deepseek.com](https://platform.deepseek.com/)
-   - **Vercel AI**: Get API key at [vercel.com](https://vercel.com/)
-   - **Cloudflare**: Get API key at [dash.cloudflare.com](https://dash.cloudflare.com/)
-   - **OpenCode Zen**: Get API key at their platform
+   - **Cohere**: Get trial API key at [cohere.com](https://cohere.com/)
 
 5. Click **Save**
 
@@ -117,5 +109,21 @@ For issues or questions, check the GitHub repository: https://github.com/urmomis
   - Confirm the page has elements matching the selectors used in `content.js` (quiz platforms differ).
 
 ## License
-This repository does not include a formal license. If you want to permit reuse, add a license file (for example `LICENSE` with the MIT text).
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+
+See the [LICENSE](LICENSE) file for the full license text.
+
+**What GPL-3.0 means:**
+- **Freedom to use**: You can use this software for any purpose
+- **Freedom to study**: You can examine how it works and modify it
+- **Freedom to share**: You can redistribute copies
+- **Freedom to improve**: You can distribute modified versions
+
+**Requirements:**
+- If you distribute modified versions, you must use GPL-3.0 (share-alike)
+- You must provide the source code
+- You must include the license and copyright notices
+- You cannot impose additional restrictions
+
+For more information about GPL-3.0, visit [gnu.org/licenses/gpl-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 
