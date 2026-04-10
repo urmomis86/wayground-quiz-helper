@@ -2,6 +2,25 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.1.0] - 2025-04-10
+
+### Fixed
+- **Fixed Cohere API integration** - Replaced all DeepSeek references with proper Cohere API calls
+- **Fixed metadata** - Updated version to 6.1.0, license to GPL-3.0, removed RL references
+- **Fixed consensus logic** - Now requires 100% AI agreement (unanimous) before answering
+- **Fixed input freezing** - Removed blur event from typeAnswer that was causing freezes
+- **Fixed typeAnswer** - Now returns Promise for proper async/await handling
+- **Removed RL references** - Cleaned up remaining selectBestModel and trackTextAnswerForFeedback calls
+
+### Added
+- **Heavy debugging** - Added detailed console logging to findQuestions and findOptions
+- **Enhanced AI prompts** - Better formatting with clear examples for AI responses
+- **Vote tally display** - Shows how many AIs voted for each answer
+
+### Changed
+- **No answer on disagreement** - Script now skips questions when AIs disagree (avoids wrong answers)
+- **Improved question detection** - Better logging to debug what's being detected
+
 ## [5.2] - 2025-04-07
 
 ### Added

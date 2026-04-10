@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Universal Quiz Helper with RL
+// @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      5.9
-// @license      MIT
-// @description  Auto-answer quiz questions with Reinforcement Learning on any site
+// @version      6.1.0
+// @license      GPL-3.0
+// @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
 // @match        https://wayground.com/*
 // @match        https://*.wayground.com/*
@@ -190,8 +190,10 @@
     };
   }
   
-  // Find questions and options - AGGRESSIVE DETECTION
+  // Find questions and options - AGGRESSIVE DETECTION with heavy debugging
   function findQuestions() {
+    console.log('[Wayground Debug] Starting findQuestions...');
+    
     const selectors = [
       'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div',
       '[class*="question"]', '[class*="prompt"]', '[class*="stem"]',
@@ -204,9 +206,12 @@
     ];
     
     let questions = [];
+    let checkedElements = 0;
+    
     for (const selector of selectors) {
       const elements = document.querySelectorAll(selector);
       elements.forEach(el => {
+        checkedElements++;
         const text = el.textContent || el.innerText || '';
         const trimmedText = text.trim();
         
@@ -223,6 +228,7 @@
         
         // Accept if has question mark OR is long text (likely a question)
         if (hasQuestionMark || (isLongEnough && !startsWithNumber)) {
+          console.log(`[Wayground Debug] Found question (${trimmedText.length} chars, hasQ=${hasQuestionMark}): "${trimmedText.substring(0, 80)}..."`);
           questions.push({ element: el, text: trimmedText });
         }
       });
@@ -238,14 +244,19 @@
       }
     }
     
-    
     uniqueQuestions.sort((a, b) => b.text.length - a.text.length);
     
-    console.log('findQuestions found:', uniqueQuestions.length, 'unique questions');
+    console.log(`[Wayground Debug] Checked ${checkedElements} elements, found ${uniqueQuestions.length} unique questions`);
+    if (uniqueQuestions.length > 0) {
+      console.log('[Wayground Debug] Top question:', uniqueQuestions[0].text.substring(0, 100));
+    }
+    
     return uniqueQuestions;
   }
   
   function findOptions() {
+    console.log('[Wayground Debug] Starting findOptions...');
+    
     const selectors = [
       'button', 'label', 'input[type="radio"]', 'input[type="checkbox"]',
       '[role="option"]', '[class*="choice"]', '[class*="answer"]', '[class*="option"]',
@@ -256,9 +267,12 @@
     ];
     
     let options = [];
+    let checkedElements = 0;
+    
     for (const selector of selectors) {
       const elements = document.querySelectorAll(selector);
       elements.forEach(el => {
+        checkedElements++;
         const text = el.textContent || el.innerText || '';
         const trimmedText = text.trim();
         const textLower = trimmedText.toLowerCase();
@@ -280,6 +294,7 @@
         // Skip if it's likely a header or navigation
         if (trimmedText.length > 200) return;
         
+        console.log(`[Wayground Debug] Found option (${trimmedText.length} chars): "${trimmedText.substring(0, 60)}..."`);
         options.push({ element: el, text: trimmedText });
       });
     }
@@ -294,12 +309,18 @@
       }
     }
     
-    console.log('findOptions found:', uniqueOptions.length, 'unique options');
+    console.log(`[Wayground Debug] Checked ${checkedElements} elements, found ${uniqueOptions.length} unique options`);
+    if (uniqueOptions.length > 0) {
+      console.log('[Wayground Debug] First 3 options:');
+      uniqueOptions.slice(0, 3).forEach((opt, i) => {
+        console.log(`  [${i+1}] ${opt.text.substring(0, 60)}`);
+      });
+    }
     
     // If we have too many, filter to reasonable length ones (likely actual answers)
     if (uniqueOptions.length > 20) {
       const filtered = uniqueOptions.filter(opt => opt.text.length >= 3 && opt.text.length <= 100);
-      console.log('Filtered to:', filtered.length, 'reasonable options');
+      console.log('[Wayground Debug] Filtered to:', filtered.length, 'reasonable options');
       return filtered;
     }
     
@@ -631,26 +652,32 @@ Your answer (just the number):`;
   async function getBothAIAnswersWithRetry(question, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.mistral && !keys.cohere) {
+    if (!keys.openrouter && !keys.cohere) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
     
-    // Enhanced prompt for better reasoning
-    const prompt = `You are answering a quiz question. Analyze carefully and select the BEST answer.
+    // Build enhanced prompt with clear formatting
+    const prompt = `You are answering a multiple choice quiz question. Your task is to select the correct answer.
 
-Question: ${question}
+QUESTION:
+${question}
 
-Options:
-${options.map((opt, i) => `${i + 1}. ${opt.text}`).join('\n')}
+OPTIONS:
+${options.map((opt, i) => `  [${i + 1}] ${opt.text}`).join('\n')}
 
-Instructions:
-1. Read the question carefully
-2. Consider each option
-3. Select the most accurate answer
-4. Respond with ONLY the number (1-${options.length})
+INSTRUCTIONS:
+1. Carefully read the question and all options
+2. Select the SINGLE best answer
+3. Respond with ONLY the option number (1-${options.length})
+4. Do NOT include any text, explanations, or punctuation
 
-Your answer (just the number):`;
+Example correct responses:
+- If option [1] is correct, respond: 1
+- If option [2] is correct, respond: 2
+- If option [3] is correct, respond: 3
+
+Your answer (single number only):`;
     
     showStatus('🤖 Calling BOTH AIs for maximum accuracy...', 'info');
     
@@ -748,15 +775,37 @@ Your answer (just the number):`;
       return null;
     }
     
-    // Check agreement
-    if (validAnswers.length === 2 && validAnswers[0].answer === validAnswers[1].answer) {
-      showStatus('✅ BOTH AIs AGREE!', 'success');
-      return validAnswers[0].answer - 1; // Convert to 0-based
+    // Show vote tally
+    const votes = {};
+    validAnswers.forEach(r => {
+      votes[r.answer] = (votes[r.answer] || 0) + 1;
+    });
+    console.log('AI Vote tally:', votes);
+    const voteDetails = Object.entries(votes).map(([ans, count]) => `Answer ${ans}: ${count} AI(s)`).join(', ');
+    showStatus(`📊 ${voteDetails}`, 'info');
+
+    // Check agreement - require 100% consensus (all AIs must agree)
+    const totalValid = validAnswers.length;
+    let bestAnswer = null;
+    let bestCount = 0;
+    
+    for (const [answer, count] of Object.entries(votes)) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestAnswer = parseInt(answer);
+      }
     }
     
-    // Return first valid answer if they disagree
-    showStatus(`⚠️ AIs disagree, using ${validAnswers[0].source}`, 'warning');
-    return validAnswers[0].answer - 1;
+    // Require unanimous agreement
+    if (bestCount === totalValid && totalValid >= 1) {
+      showStatus(`✅ ALL ${totalValid} AIs agree on answer ${bestAnswer}`, 'success');
+      return bestAnswer - 1; // Convert to 0-based
+    }
+    
+    // AIs disagree - don't answer to avoid being wrong
+    showStatus(`❌ No consensus (${voteDetails}) - NOT answering to avoid error`, 'error');
+    console.log('No AI consensus, skipping question to avoid wrong answer');
+    return null;
   }
   
   // Fallback single AI answer
@@ -907,39 +956,43 @@ Respond with just the answer text, nothing else.`;
     return null;
   }
   
-  // Type answer into input field
+  // Type answer into input field - returns Promise that resolves when done
   function typeAnswer(input, text) {
-    showStatus(`⌨️ Typing answer...`, 'info');
-    
-    // Focus the input
-    input.focus();
-    input.click();
-    
-    // Clear existing value
-    input.value = '';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    
-    // Type character by character with delay
-    let index = 0;
-    const typeInterval = setInterval(() => {
-      if (index < text.length) {
-        input.value += text[index];
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        index++;
-      } else {
-        clearInterval(typeInterval);
-        // Final events
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        input.dispatchEvent(new Event('blur', { bubbles: true }));
-        showStatus('✅ Answer typed!', 'success');
-        
-        // Try to find and click submit button
-        setTimeout(() => {
-          clickSubmitButton(input);
-        }, 500);
-      }
-    }, 50); // 50ms per character
+    return new Promise((resolve) => {
+      showStatus(`⌨️ Typing answer...`, 'info');
+      console.log(`[Wayground Debug] Typing "${text}" into input`);
+      
+      // Focus the input
+      input.focus();
+      input.click();
+      
+      // Clear existing value
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Type character by character with delay
+      let index = 0;
+      const typeInterval = setInterval(() => {
+        if (index < text.length) {
+          input.value += text[index];
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          index++;
+        } else {
+          clearInterval(typeInterval);
+          // Final events (NO blur - causes freezing)
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          showStatus('✅ Answer typed!', 'success');
+          console.log('[Wayground Debug] Finished typing');
+          
+          // Try to find and click submit button
+          setTimeout(() => {
+            clickSubmitButton(input);
+            resolve();
+          }, 500);
+        }
+      }, 50); // 50ms per character
+    });
   }
   
   // Find and click submit button near input
@@ -1021,12 +1074,10 @@ Respond with just the answer text, nothing else.`;
           input.element.style.border = '3px solid #00aa00';
           input.element.style.backgroundColor = '#ccffcc';
           
-          // Type the answer
-          typeAnswer(input.element, answer);
+          // Type the answer with delay for realism
+          await typeAnswer(input.element, answer);
           
-          // Track for feedback
-          const rlModel = selectBestModel();
-          trackTextAnswerForFeedback(input.element, answer, rlModel);
+          console.log('[Wayground Debug] Text answer typed:', answer);
         } else {
           showStatus('❌ Could not generate text answer', 'error');
         }
