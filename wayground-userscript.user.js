@@ -459,7 +459,7 @@ Your answer (single number only):`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'mistralai/mistral-7b-instruct:free', // Better free model
+                model: 'meta-llama/llama-3-8b-instruct:free',
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: 50, // Increased for reasoning
                 temperature: 0.1
@@ -559,7 +559,7 @@ Your answer (single number only):`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-light',
+            model: 'command',
             prompt: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.',
             max_tokens: 20,
             temperature: 0.1
@@ -668,7 +668,7 @@ Your answer (single number only):`;
             'HTTP-Referer': 'https://openrouter.ai/'
           },
           body: JSON.stringify({
-            model: 'mistralai/mistral-7b-instruct:free',
+            model: 'meta-llama/llama-3-8b-instruct:free',
             messages: [{ role: 'user', content: prompt }],
             max_tokens: 20,
             temperature: 0.1
@@ -742,7 +742,7 @@ Your answer (single number only):`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-light',
+            model: 'command',
             prompt: prompt + '\n\nRespond with ONLY a single number (1-4):',
             max_tokens: 10,
             temperature: 0.1
@@ -819,7 +819,7 @@ Respond with just the answer text, nothing else.`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-light',
+            model: 'command',
             prompt: prompt,
             max_tokens: 150,
             temperature: 0.3
@@ -1260,7 +1260,7 @@ Respond with just the answer text, nothing else.`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'mistralai/mistral-7b-instruct:free',
+                model: 'meta-llama/llama-3-8b-instruct:free',
                 messages: [
                   { role: 'user', content: testPrompt }
                 ],
@@ -1326,7 +1326,7 @@ Respond with just the answer text, nothing else.`;
                 'Authorization': `Bearer ${cohereKey}`
               },
               body: JSON.stringify({
-                model: 'command-light',
+                model: 'command',
                 prompt: testPrompt,
                 max_tokens: 10,
                 temperature: 0.1
