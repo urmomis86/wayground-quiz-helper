@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.1.1
+// @version      6.2.0
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -117,7 +117,7 @@
       cohere: GM_getValue('cohere_key', '')
     };
   }
-  
+
   function saveAPIKeys(keys) {
     GM_setValue('openrouter_key', keys.openrouter);
     GM_setValue('mistral_key', keys.mistral);
@@ -396,263 +396,11 @@
     return '';
   }
   
-  // API call to get answer with full page context
-  async function getAnswerWithContext(pageContent, keys) {
-    const results = { openrouter: null, deepseek: null, vercel: null, opencodezen: null, cloudflare: null, groq: null };
-    
-    // Build comprehensive prompt with full page content
-    const prompt = `I need you to analyze this quiz/test page and answer the question. Here's the full page content:
-
-PAGE TITLE: ${pageContent.title}
-PAGE URL: ${pageContent.url}
-
-DETECTED QUESTIONS:
-${pageContent.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
-
-DETECTED OPTIONS:
-${pageContent.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}
-
-PAGE CONTENT:
-${pageContent.bodyText.substring(0, 2000)}
-
-IMPORTANT INSTRUCTIONS:
-1. Analyze the question carefully
-2. Determine the correct answer based on your knowledge
-3. Look at the DETECTED OPTIONS above - each option has a number (1, 2, 3, etc.) and text
-4. Find which option TEXT matches your answer
-5. Respond with ONLY the NUMBER of that option (1, 2, 3, etc.)
-6. Do NOT include any text, explanation, or punctuation
-7. Do NOT write "The answer is" or the answer text itself
-8. ONLY output the number: 1 OR 2 OR 3 OR 4 (whichever option is correct)
-
-Example:
-If options are:
-1. Paris
-2. London  
-3. Berlin
-4. Madrid
-
-And the correct answer is "Paris", you MUST respond with: 1
-
-Example correct responses:
-- 2
-- 4
-- 1
-
-If you cannot determine the answer, respond with: UNCERTAIN
-If there is no clear question, respond with: NO_QUESTION
-
-Your answer (just the number):`;
-
-    // Helper function to call AI with timeout and detailed error logging
-    const callAI = async (name, apiCallFn, timeout = 10000) => {
-      try {
-        return await Promise.race([
-          apiCallFn(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`${name} timeout`)), timeout)
-          )
-        ]);
-      } catch (err) {
-        console.error(`[${name}] FAILED:`, err.message);
-        if (err.response) {
-          console.error(`[${name}] Response status:`, err.response.status);
-        }
-        showStatus(`❌ ${name}: ${err.message}`, 'error');
-        return null;
-      }
-    };
-    
-    // Run all AIs in parallel with individual error handling
-    const promises = [];
-    
-    // Call OpenRouter
-    if (keys.openrouter) {
-      promises.push(callAI('OpenRouter', async () => {
-        showStatus('🌐 OpenRouter analyzing...', 'info');
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.openrouter}`,
-            'HTTP-Referer': 'https://openrouter.ai/'
-          },
-          body: JSON.stringify({
-            model: 'openrouter/free',
-            messages: [
-              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 100
-          })
-        });
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.openrouter = answer;
-        showStatus('✅ OpenRouter: ' + (answer || 'no answer'), 'success');
-        return answer;
-      }));
-    }
-    
-    // Call Mistral AI
-    if (keys.mistral) {
-      promises.push(callAI('Mistral', async () => {
-        showStatus('🌐 Mistral analyzing...', 'info');
-        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.mistral}`
-          },
-          body: JSON.stringify({
-            model: 'mistral-tiny',
-            messages: [
-              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 100
-          })
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Mistral HTTP ${response.status}:`, errorText);
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const answer = data.choices?.[0]?.message?.content?.trim();
-        results.mistral = answer;
-        showStatus('✅ Mistral: ' + (answer || 'no answer'), 'success');
-        return answer;
-      }));
-    }
-    
-    // Call Cohere AI
-    if (keys.cohere) {
-      promises.push(callAI('Cohere', async () => {
-        showStatus('🌐 Cohere analyzing...', 'info');
-        const response = await fetch('https://api.cohere.ai/v1/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys.cohere}`
-          },
-          body: JSON.stringify({
-            model: 'command-r',
-            message: prompt,
-            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.',
-            max_tokens: 100
-          })
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Cohere HTTP ${response.status}:`, errorText);
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const answer = data.text?.trim();
-        results.cohere = answer;
-        showStatus('✅ Cohere: ' + (answer || 'no answer'), 'success');
-        return answer;
-      }));
-    }
-    
-    // Wait for AI to complete (or timeout)
-    await Promise.all(promises);
-    
-    return results;
-  }
-  
-  // Parse answer from AI response
-  function parseAnswer(response) {
-    if (!response) return null;
-    
-    // Look for number in response
-    const match = response.match(/\b([1-9])\b/);
-    if (match) {
-      return parseInt(match[1]) - 1; // Convert to 0-based index
-    }
-    
-    // Check for uncertainty
-    if (response.toUpperCase().includes('UNCERTAIN') || response.toUpperCase().includes('NO_QUESTION')) {
-      return null;
-    }
-    
-    return null;
-  }
-  
-  // Get consensus answer from all AIs
-  async function getConsensusAnswer(pageContent, options) {
-    const keys = getAPIKeys();
-    
-    if (!keys.openrouter && !keys.mistral && !keys.cohere) {
-      showStatus('⚠️ Set API keys in settings', 'error');
-      return null;
-    }
-    
-    showStatus('🤖 All AIs reading screen...', 'info');
-    
-    const results = await getAnswerWithContext(pageContent, keys);
-    
-    const openrouterAnswer = parseAnswer(results.openrouter);
-    const mistralAnswer = parseAnswer(results.mistral);
-    const cohereAnswer = parseAnswer(results.cohere);
-    
-    showStatus(`🤖 OpenRouter: ${openrouterAnswer !== null ? openrouterAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 Mistral: ${mistralAnswer !== null ? mistralAnswer + 1 : 'no answer'}`, 'info');
-    showStatus(`🤖 Cohere: ${cohereAnswer !== null ? cohereAnswer + 1 : 'no answer'}`, 'info');
-    
-    // Count votes for each answer
-    const votes = {};
-    if (openrouterAnswer !== null) votes[openrouterAnswer] = (votes[openrouterAnswer] || 0) + 1;
-    if (mistralAnswer !== null) votes[mistralAnswer] = (votes[mistralAnswer] || 0) + 1;
-    if (cohereAnswer !== null) votes[cohereAnswer] = (votes[cohereAnswer] || 0) + 1;
-    
-    // Find the answer with most votes
-    let bestAnswer = null;
-    let bestVotes = 0;
-    for (const [answer, count] of Object.entries(votes)) {
-      if (count > bestVotes) {
-        bestVotes = count;
-        bestAnswer = parseInt(answer);
-      }
-    }
-    
-    // If majority agrees (2+ out of 3)
-    if (bestVotes >= 2) {
-      showStatus(`✅ ${bestVotes} AIs agree on answer!`, 'success');
-      return bestAnswer;
-    }
-    
-    // If only one has answer, use that
-    if (openrouterAnswer !== null) {
-      showStatus('✅ Using OpenRouter answer', 'success');
-      return openrouterAnswer;
-    }
-    
-    if (mistralAnswer !== null) {
-      showStatus('✅ Using Mistral answer', 'success');
-      return mistralAnswer;
-    }
-    
-    if (cohereAnswer !== null) {
-      showStatus('✅ Using Cohere answer', 'success');
-      return cohereAnswer;
-    }
-    
-    showStatus('❌ No AI could determine answer', 'error');
-    return null;
-  }
-  
   // Call both AIs simultaneously with improved prompting for maximum accuracy
   async function getBothAIAnswersWithRetry(question, options) {
     const keys = getAPIKeys();
     
-    if (!keys.openrouter && !keys.cohere) {
+    if (!keys.openrouter && !keys.mistral && !keys.cohere) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
@@ -689,12 +437,12 @@ Your answer (single number only):`;
     console.log('[Wayground Debug] ' + prompt);
     console.log('[Wayground Debug] =======================================');
     
-    showStatus('🤖 Calling BOTH AIs for maximum accuracy...', 'info');
-    
-    // Create both API calls with timeout
+    showStatus('🤖 Calling ALL AIs for maximum accuracy...', 'info');
+
+    // Create all API calls with timeout
     const promises = [];
     const timeout = 15000; // 15 second timeout
-    
+
     // OpenRouter call with timeout and rate limit retry
     if (keys.openrouter) {
       const openrouterPromise = Promise.race([
@@ -753,7 +501,54 @@ Your answer (single number only):`;
       });
       promises.push(openrouterPromise);
     }
-    
+
+    // Mistral call with timeout
+    if (keys.mistral) {
+      const mistralPromise = Promise.race([
+        fetch('https://api.mistral.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.mistral}`
+          },
+          body: JSON.stringify({
+            model: 'mistral-tiny',
+            messages: [
+              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, or 4) indicating which option is correct. Never include text or explanations.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 50,
+            temperature: 0.1
+          })
+        }).then(async (response) => {
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Wayground Debug] Mistral HTTP error:', errorText);
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const data = await response.json();
+          const answer = data.choices?.[0]?.message?.content?.trim();
+          console.log('[Wayground Debug] Mistral raw:', answer);
+          const match = answer.match(/\d+/);
+          const num = match ? parseInt(match[0]) : NaN;
+          console.log('[Wayground Debug] Mistral parsed:', num);
+          // STRICT: Only accept answers 1-4
+          if (num >= 1 && num <= 4) {
+            showStatus(`✅ Mistral: ${num}`, 'success');
+            return { source: 'mistral', answer: num, valid: true };
+          }
+          console.log(`[Wayground Debug] Mistral rejected answer ${num} (must be 1-4)`);
+          throw new Error(`Answer ${num} out of allowed range (1-4)`);
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+      ]).catch(err => {
+        console.error('[Wayground Debug] Mistral error:', err.message);
+        showStatus(`❌ Mistral: ${err.message}`, 'error');
+        return { source: 'mistral', answer: null, valid: false };
+      });
+      promises.push(mistralPromise);
+    }
+
     // Cohere call with timeout - using v1/generate for trial key compatibility
     if (keys.cohere) {
       const coherePromise = Promise.race([
@@ -825,32 +620,33 @@ Your answer (single number only):`;
     const voteDetails = Object.entries(votes).map(([ans, count]) => `Answer ${ans}: ${count} AI(s)`).join(', ');
     showStatus(`📊 ${voteDetails}`, 'info');
 
-    // Check agreement - require 100% consensus (all AIs must agree)
+    // Check agreement - require majority (at least 2 out of 3 AIs)
     const totalValid = validAnswers.length;
     let bestAnswer = null;
     let bestCount = 0;
-    
+
     for (const [answer, count] of Object.entries(votes)) {
       if (count > bestCount) {
         bestCount = count;
         bestAnswer = parseInt(answer);
       }
     }
-    
+
     console.log(`[Wayground Debug] Best answer: ${bestAnswer} with ${bestCount}/${totalValid} votes`);
-    
-    // Require unanimous agreement
-    if (bestCount === totalValid && totalValid >= 1) {
+
+    // Require majority (2+ out of 3, or unanimous if only 2 AIs)
+    const requiredVotes = totalValid >= 3 ? 2 : totalValid;
+    if (bestCount >= requiredVotes && bestCount >= 2) {
       const optionIndex = bestAnswer - 1;
       const optionText = options[optionIndex]?.text?.substring(0, 50) || 'N/A';
-      showStatus(`✅ ALL ${totalValid} AIs agree on answer ${bestAnswer}`, 'success');
+      showStatus(`✅ ${bestCount}/${totalValid} AIs agree on answer ${bestAnswer}`, 'success');
       console.log(`[Wayground Debug] Selected option [${bestAnswer}]: "${optionText}"`);
       return optionIndex; // Convert to 0-based
     }
-    
+
     // AIs disagree - don't answer to avoid being wrong
     showStatus(`❌ No consensus (${voteDetails}) - NOT answering to avoid error`, 'error');
-    console.log('[Wayground Debug] No AI consensus, skipping question to avoid wrong answer');
+    console.log('[Wayground Debug] No AI consensus (need 2+ AIs to agree), skipping question');
     console.log('[Wayground Debug] =======================================');
     return null;
   }
@@ -886,15 +682,55 @@ Your answer (single number only):`;
         const match = answer.match(/\d+/);
         const num = match ? parseInt(match[0]) : NaN;
         
-        if (num >= 1 && num <= options.length) {
+        // STRICT: Only accept answers 1-4
+        if (num >= 1 && num <= 4) {
           showStatus(`✅ Fallback OpenRouter: ${num}`, 'success');
           return num - 1;
         }
+        console.log(`[Wayground Debug] Fallback OpenRouter rejected answer ${num} (must be 1-4)`);
       } catch (e) {
         console.error('[Wayground Debug] Fallback OpenRouter failed:', e);
       }
     }
-    
+
+    // Try Mistral fallback
+    if (keys.mistral) {
+      try {
+        showStatus('🔄 Trying Mistral fallback...', 'info');
+        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.mistral}`
+          },
+          body: JSON.stringify({
+            model: 'mistral-tiny',
+            messages: [
+              { role: 'system', content: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, or 4) indicating which option is correct. Never include text or explanations.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 20,
+            temperature: 0.1
+          })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        console.log('[Wayground Debug] Fallback Mistral raw:', answer);
+        const match = answer.match(/\d+/);
+        const num = match ? parseInt(match[0]) : NaN;
+
+        if (num >= 1 && num <= 4) {
+          showStatus(`✅ Fallback Mistral: ${num}`, 'success');
+          return num - 1;
+        }
+        console.log(`[Wayground Debug] Fallback Mistral rejected answer ${num} (must be 1-4)`);
+      } catch (e) {
+        console.error('[Wayground Debug] Fallback Mistral failed:', e);
+      }
+    }
+
     // Try Cohere fallback - using v1/generate for trial key compatibility
     if (keys.cohere) {
       try {
@@ -954,7 +790,7 @@ Respond with just the answer text, nothing else.`;
             'HTTP-Referer': 'https://openrouter.ai/'
           },
           body: JSON.stringify({
-            model: 'openrouter/free',
+            model: 'mistralai/mistral-7b-instruct:free',
             messages: [{ role: 'user', content: prompt }],
             max_tokens: 150
           })
@@ -962,21 +798,21 @@ Respond with just the answer text, nothing else.`;
         
         const data = await response.json();
         answer = data.choices?.[0]?.message?.content?.trim();
-        console.log('OpenRouter text answer:', answer);
+        console.log('[Wayground Debug] OpenRouter text answer:', answer);
         if (answer) {
           showStatus('✅ OpenRouter generated answer', 'success');
           return answer;
         }
       } catch (error) {
-        console.error('OpenRouter text generation error:', error);
+        console.error('[Wayground Debug] OpenRouter text generation error:', error);
       }
     }
     
-    // Try Cohere
+    // Try Cohere - using v1/generate for trial key compatibility
     if (keys.cohere) {
       showStatus('🌐 Cohere generating text answer...', 'info');
       try {
-        const response = await fetch('https://api.cohere.com/v1/chat', {
+        const response = await fetch('https://api.cohere.com/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -984,21 +820,26 @@ Respond with just the answer text, nothing else.`;
           },
           body: JSON.stringify({
             model: 'command-light',
-            message: prompt,
-            preamble: 'You are a helpful assistant. Provide concise, accurate answers.',
-            max_tokens: 150
+            prompt: prompt,
+            max_tokens: 150,
+            temperature: 0.3
           })
         });
         
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error('[Wayground Debug] Cohere text error response:', errText);
+          throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
-        answer = data.text?.trim();
-        console.log('Cohere text answer:', answer);
+        answer = data.generations?.[0]?.text?.trim();
+        console.log('[Wayground Debug] Cohere text answer:', answer);
         if (answer) {
           showStatus('✅ Cohere generated answer', 'success');
           return answer;
         }
       } catch (error) {
-        console.error('Cohere text generation error:', error);
+        console.error('[Wayground Debug] Cohere text generation error:', error);
       }
     }
     
@@ -1419,9 +1260,8 @@ Respond with just the answer text, nothing else.`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'openrouter/free',
+                model: 'mistralai/mistral-7b-instruct:free',
                 messages: [
-                  { role: 'system', content: 'You are a helpful assistant.' },
                   { role: 'user', content: testPrompt }
                 ],
                 max_tokens: 10
@@ -1441,7 +1281,7 @@ Respond with just the answer text, nothing else.`;
         } else {
           results.push(`⚠️ <b>OpenRouter:</b> No API key`);
         }
-        
+
         // Test Mistral
         const mistralKey = document.getElementById('wg_mistral_key').value.trim();
         if (mistralKey) {
@@ -1455,13 +1295,12 @@ Respond with just the answer text, nothing else.`;
               body: JSON.stringify({
                 model: 'mistral-tiny',
                 messages: [
-                  { role: 'system', content: 'You are a helpful assistant.' },
                   { role: 'user', content: testPrompt }
                 ],
                 max_tokens: 10
               })
             });
-            
+
             if (response.ok) {
               const data = await response.json();
               const answer = data.choices?.[0]?.message?.content?.trim();
@@ -1475,28 +1314,28 @@ Respond with just the answer text, nothing else.`;
         } else {
           results.push(`⚠️ <b>Mistral:</b> No API key`);
         }
-        
+
         // Test Cohere
         const cohereKey = document.getElementById('wg_cohere_key').value.trim();
         if (cohereKey) {
           try {
-            const response = await fetch('https://api.cohere.ai/v1/chat', {
+            const response = await fetch('https://api.cohere.com/v1/generate', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${cohereKey}`
               },
               body: JSON.stringify({
-                model: 'command-r',
-                message: testPrompt,
-                preamble: 'You are a helpful assistant.',
-                max_tokens: 10
+                model: 'command-light',
+                prompt: testPrompt,
+                max_tokens: 10,
+                temperature: 0.1
               })
             });
             
             if (response.ok) {
               const data = await response.json();
-              const answer = data.text?.trim();
+              const answer = data.generations?.[0]?.text?.trim();
               results.push(`✅ <b>Cohere:</b> Working (answered: "${answer}")`);
             } else {
               results.push(`❌ <b>Cohere:</b> HTTP ${response.status}`);
@@ -1710,22 +1549,23 @@ Respond with just the answer text, nothing else.`;
       <div style="margin-bottom: 15px;">
         <strong>How to use:</strong><br>
         1. Click ⚙️ Menu → 🔑 API Keys<br>
-        2. Enter your OpenRouter and/or DeepSeek API keys<br>
-        3. Visit any Wayground quiz page<br>
+        2. Enter your OpenRouter, Mistral, and/or Cohere API keys<br>
+        3. Visit any quiz page<br>
         4. Script automatically finds questions and highlights answers<br>
-        5. Correct answer is clicked after 3 seconds
+        5. Correct answer is clicked after AI consensus (2+ AIs must agree)
       </div>
       <div style="margin-bottom: 15px;">
         <strong>Features:</strong><br>
-        • Reinforcement Learning (learns best model)<br>
-        • Multiple API support (OpenRouter, DeepSeek)<br>
+        • Multi-AI Consensus (majority vote from 2+ AIs)<br>
+        • OpenRouter + Mistral + Cohere API support<br>
         • Auto-detection of questions and options<br>
         • Visual highlighting of correct answers
       </div>
       <div style="margin-bottom: 15px;">
         <strong>API Keys:</strong><br>
-        • OpenRouter: Get from openrouter.ai<br>
-        • DeepSeek: Get from platform.deepseek.com
+        • OpenRouter: Get from openrouter.ai (free tier available)<br>
+        • Mistral: Get from console.mistral.ai<br>
+        • Cohere: Get from dashboard.cohere.com (trial key available)
       </div>
       <div style="text-align: right; margin-top: 20px;">
         <button id="wg_close_help" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Got it!</button>

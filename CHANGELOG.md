@@ -2,6 +2,29 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.0] - 2025-04-13
+
+### Added
+- **Mistral AI integration** - Re-added Mistral as a third AI provider (OpenRouter + Mistral + Cohere)
+- **Majority consensus** - Changed from unanimous to majority voting (2+ out of 3 AIs must agree)
+
+### Fixed
+- **Cohere text answer endpoint** - Fixed to use `/v1/generate` instead of `/v1/chat` for trial key compatibility
+- **Cohere test endpoint** - Updated API test in settings to use correct `/v1/generate` endpoint
+- **Debug log consistency** - Added `[Wayground Debug]` prefix to all remaining console logs
+- **API key storage** - Re-added Mistral to `getAPIKeys()` and `saveAPIKeys()` functions
+
+### Removed
+- **Dead code cleanup** - Removed unused `getAnswerWithContext()` and `getConsensusAnswer()` functions
+- **DeepSeek references** - Removed all remaining DeepSeek references from help dialog and codebase
+- **Old AI calling code** - Removed deprecated multi-AI calling logic with stale endpoints
+
+### Changed
+- **Consensus threshold** - Now requires 2+ AIs to agree (majority) instead of 100% unanimous
+- **Settings dialog** - Added Mistral API key input field
+- **Help dialog** - Updated to mention all 3 supported APIs (OpenRouter, Mistral, Cohere)
+- **Fallback function** - Added Mistral as fallback option between OpenRouter and Cohere
+
 ## [6.1.1] - 2025-04-10
 
 ### Fixed
