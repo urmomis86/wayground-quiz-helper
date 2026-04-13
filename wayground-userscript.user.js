@@ -1258,8 +1258,7 @@ Respond with just the answer text, nothing else.`;
         // Rebuild menu to update text
         createOptionsMenu();
       }},
-      {text: '🔑 API Keys', action: showSettingsDialog},
-      {text: '📋 Copy Script', action: autoCopyToDownloads}
+      {text: '🔑 API Keys', action: showSettingsDialog}
     ];
     
     items.forEach(item => {
