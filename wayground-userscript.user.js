@@ -674,15 +674,20 @@ ${options.map((opt, i) => `   - Option [${i + 1}] "${opt.text}": ${i === 0 ? 'Co
 4. Select your final answer
 
 FINAL ANSWER:
-You MUST respond with ONLY a single digit number from 1 to ${options.length}.
+You MUST respond with ONLY a single digit number from 1 to 4 (maximum 4 options).
 - If option [1] is correct, respond with just: 1
 - If option [2] is correct, respond with just: 2
 - If option [3] is correct, respond with just: 3
-- etc.
+- If option [4] is correct, respond with just: 4
 
-Do NOT include any explanation, text, or punctuation. Only the number.
+Do NOT respond with 5 or higher. Do NOT include any explanation, text, or punctuation. Only the number 1-4.
 
 Your answer (single number only):`;
+    
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] SENDING PROMPT TO AIs:');
+    console.log('[Wayground Debug] ' + prompt);
+    console.log('[Wayground Debug] =======================================');
     
     showStatus('🤖 Calling BOTH AIs for maximum accuracy...', 'info');
     
@@ -730,11 +735,13 @@ Your answer (single number only):`;
             const match = answer.match(/\d+/);
             const num = match ? parseInt(match[0]) : NaN;
             console.log('[Wayground Debug] OpenRouter parsed:', num);
-            if (num >= 1 && num <= options.length) {
+            // STRICT: Only accept answers 1-4
+            if (num >= 1 && num <= 4) {
               showStatus(`✅ OpenRouter: ${num}`, 'success');
               return { source: 'openrouter', answer: num, valid: true };
             }
-            throw new Error('Invalid answer format');
+            console.log(`[Wayground Debug] OpenRouter rejected answer ${num} (must be 1-4)`);
+            throw new Error(`Answer ${num} out of allowed range (1-4)`);
           }
           throw new Error('Rate limit retries exhausted');
         })(),
@@ -747,10 +754,10 @@ Your answer (single number only):`;
       promises.push(openrouterPromise);
     }
     
-    // Cohere call with timeout
+    // Cohere call with timeout - using v1/generate for trial key compatibility
     if (keys.cohere) {
       const coherePromise = Promise.race([
-        fetch('https://api.cohere.com/v1/chat', {
+        fetch('https://api.cohere.com/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -758,28 +765,34 @@ Your answer (single number only):`;
           },
           body: JSON.stringify({
             model: 'command-light',
-            message: prompt,
-            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct. Never include text or explanations.',
-            max_tokens: 100
+            prompt: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.',
+            max_tokens: 20,
+            temperature: 0.1
           })
         }).then(async (response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) {
+            const errText = await response.text();
+            console.error('[Wayground Debug] Cohere error response:', errText);
+            throw new Error(`HTTP ${response.status}`);
+          }
           const data = await response.json();
-          const answer = data.text?.trim();
-          console.log('Cohere raw:', answer);
+          const answer = data.generations?.[0]?.text?.trim();
+          console.log('[Wayground Debug] Cohere raw:', answer);
           const match = answer.match(/\d+/);
           const num = match ? parseInt(match[0]) : NaN;
-          console.log('Cohere parsed:', num);
-          if (num >= 1 && num <= options.length) {
+          console.log('[Wayground Debug] Cohere parsed:', num);
+          // STRICT: Only accept answers 1-4
+          if (num >= 1 && num <= 4) {
             showStatus(`✅ Cohere: ${num}`, 'success');
             return { source: 'cohere', answer: num, valid: true };
           }
-          throw new Error('Invalid answer format');
+          console.log(`[Wayground Debug] Cohere rejected answer ${num} (must be 1-4)`);
+          throw new Error(`Answer ${num} out of allowed range (1-4)`);
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
       ]).catch(err => {
-        console.error('Cohere error:', err.message);
-        showStatus('❌ Cohere failed', 'error');
+        console.error('[Wayground Debug] Cohere error:', err.message);
+        showStatus(`❌ Cohere: ${err.message}`, 'error');
         return { source: 'cohere', answer: null, valid: false };
       });
       promises.push(coherePromise);
@@ -787,13 +800,19 @@ Your answer (single number only):`;
     
     // Wait for results
     const results = await Promise.all(promises);
-    console.log('AI results:', results);
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] RAW AI RESULTS:');
+    results.forEach((r, i) => {
+      console.log(`[Wayground Debug] Result ${i+1}: source=${r.source}, answer=${r.answer}, valid=${r.valid}`);
+    });
     
     // Find valid answers
     const validAnswers = results.filter(r => r.valid);
+    console.log(`[Wayground Debug] Valid answers: ${validAnswers.length}/${results.length}`);
     
     if (validAnswers.length === 0) {
       showStatus('❌ Both AIs failed', 'error');
+      console.log('[Wayground Debug] No valid answers from any AI');
       return null;
     }
     
@@ -802,7 +821,7 @@ Your answer (single number only):`;
     validAnswers.forEach(r => {
       votes[r.answer] = (votes[r.answer] || 0) + 1;
     });
-    console.log('AI Vote tally:', votes);
+    console.log('[Wayground Debug] Vote tally:', votes);
     const voteDetails = Object.entries(votes).map(([ans, count]) => `Answer ${ans}: ${count} AI(s)`).join(', ');
     showStatus(`📊 ${voteDetails}`, 'info');
 
@@ -818,15 +837,21 @@ Your answer (single number only):`;
       }
     }
     
+    console.log(`[Wayground Debug] Best answer: ${bestAnswer} with ${bestCount}/${totalValid} votes`);
+    
     // Require unanimous agreement
     if (bestCount === totalValid && totalValid >= 1) {
+      const optionIndex = bestAnswer - 1;
+      const optionText = options[optionIndex]?.text?.substring(0, 50) || 'N/A';
       showStatus(`✅ ALL ${totalValid} AIs agree on answer ${bestAnswer}`, 'success');
-      return bestAnswer - 1; // Convert to 0-based
+      console.log(`[Wayground Debug] Selected option [${bestAnswer}]: "${optionText}"`);
+      return optionIndex; // Convert to 0-based
     }
     
     // AIs disagree - don't answer to avoid being wrong
     showStatus(`❌ No consensus (${voteDetails}) - NOT answering to avoid error`, 'error');
-    console.log('No AI consensus, skipping question to avoid wrong answer');
+    console.log('[Wayground Debug] No AI consensus, skipping question to avoid wrong answer');
+    console.log('[Wayground Debug] =======================================');
     return null;
   }
   
@@ -870,11 +895,11 @@ Your answer (single number only):`;
       }
     }
     
-    // Try Cohere fallback
+    // Try Cohere fallback - using v1/generate for trial key compatibility
     if (keys.cohere) {
       try {
         showStatus('🔄 Trying Cohere fallback...', 'info');
-        const response = await fetch('https://api.cohere.com/v1/chat', {
+        const response = await fetch('https://api.cohere.com/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -882,24 +907,25 @@ Your answer (single number only):`;
           },
           body: JSON.stringify({
             model: 'command-light',
-            message: prompt,
-            preamble: 'You are a quiz answering assistant. You MUST respond with ONLY a single number (1, 2, 3, etc.) indicating which option is correct.',
-            max_tokens: 100
+            prompt: prompt + '\n\nRespond with ONLY a single number (1-4):',
+            max_tokens: 10,
+            temperature: 0.1
           })
         });
         
-        if (!response.ok) throw new Error('Failed');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        const answer = data.text?.trim();
+        const answer = data.generations?.[0]?.text?.trim();
+        console.log('[Wayground Debug] Fallback Cohere raw:', answer);
         const match = answer.match(/\d+/);
         const num = match ? parseInt(match[0]) : NaN;
         
-        if (num >= 1 && num <= options.length) {
+        if (num >= 1 && num <= 4) {
           showStatus(`✅ Fallback Cohere: ${num}`, 'success');
           return num - 1;
         }
       } catch (e) {
-        console.error('Fallback Cohere failed:', e);
+        console.error('[Wayground Debug] Fallback Cohere failed:', e);
       }
     }
     
@@ -1069,9 +1095,19 @@ Respond with just the answer text, nothing else.`;
     const options = findOptions();
     const textInputs = findTextInputs();
     
-    console.log('Questions found:', questions.length);
-    console.log('Options found:', options.length);
-    console.log('Text inputs found:', textInputs.length);
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] QUESTIONS FOUND:', questions.length);
+    questions.forEach((q, i) => {
+      console.log(`[Wayground Debug] Q${i+1}: "${q.text.substring(0, 100)}${q.text.length > 100 ? '...' : ''}"`);
+    });
+    console.log('[Wayground Debug] ---------------------------------------');
+    console.log('[Wayground Debug] OPTIONS FOUND:', options.length);
+    options.forEach((opt, i) => {
+      console.log(`[Wayground Debug] Opt${i+1}: "${opt.text.substring(0, 60)}${opt.text.length > 60 ? '...' : ''}"`);
+    });
+    console.log('[Wayground Debug] ---------------------------------------');
+    console.log('[Wayground Debug] TEXT INPUTS FOUND:', textInputs.length);
+    console.log('[Wayground Debug] =======================================');
     
     // Handle text input questions first
     if (textInputs.length > 0 && questions.length > 0) {
