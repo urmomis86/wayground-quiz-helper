@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.2.0
+// @version      6.2.1
 // @license      GPL-3.0
-// @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
+// @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Mistral + Cohere)
 // @author       You
 // @match        https://wayground.com/*
 // @match        https://*.wayground.com/*

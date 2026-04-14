@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.1] - 2025-04-14
+
+### Fixed
+- **OpenRouter model name** - Changed from `mistralai/mistral-7b-instruct:free` to `meta-llama/llama-3-8b-instruct:free` (fixes HTTP 404)
+- **Cohere model name** - Changed from `command-light` to `command` (fixes HTTP 404)
+- **Updated all API calls** - Model names synchronized across test, main, fallback, and text answer functions
+
 ## [6.2.0] - 2025-04-13
 
 ### Added
