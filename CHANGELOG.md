@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.4] - 2025-04-14
+
+### Fixed
+- **Cohere endpoint** - Changed from `/v1/chat` to `/v2/chat` (v1 deprecated)
+- **Cohere model** - Changed from `command` to `command-r` for better compatibility
+- **Cohere response parsing** - Updated for v2/chat format (data.message.content[0].text)
+
 ## [6.2.3] - 2025-04-14
 
 ### Removed

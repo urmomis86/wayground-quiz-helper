@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.2.3
+// @version      6.2.4
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -500,17 +500,17 @@ Your answer (single number only):`;
       promises.push(openrouterPromise);
     }
 
-    // Cohere call with timeout - using v1/chat for trial key compatibility
+    // Cohere call with timeout - using v2/chat endpoint
     if (keys.cohere) {
       const coherePromise = Promise.race([
-        fetch('https://api.cohere.ai/v1/chat', {
+        fetch('https://api.cohere.ai/v2/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command',
+            model: 'command-r',
             message: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.',
             max_tokens: 20,
             temperature: 0.1
@@ -522,7 +522,7 @@ Your answer (single number only):`;
             throw new Error(`HTTP ${response.status}`);
           }
           const data = await response.json();
-          const answer = data.text?.trim() || data.message?.content?.trim();
+          const answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
           console.log('[Wayground Debug] Cohere raw:', answer);
           const match = answer.match(/\d+/);
           const num = match ? parseInt(match[0]) : NaN;
@@ -643,18 +643,18 @@ Your answer (single number only):`;
       }
     }
 
-    // Try Cohere fallback - using v1/chat for trial key compatibility
+    // Try Cohere fallback - using v2/chat endpoint
     if (keys.cohere) {
       try {
         showStatus('🔄 Trying Cohere fallback...', 'info');
-        const response = await fetch('https://api.cohere.ai/v1/chat', {
+        const response = await fetch('https://api.cohere.ai/v2/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command',
+            model: 'command-r',
             message: prompt + '\n\nRespond with ONLY a single number (1-4):',
             max_tokens: 10,
             temperature: 0.1
@@ -663,7 +663,7 @@ Your answer (single number only):`;
         
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        const answer = data.text?.trim() || data.message?.content?.trim();
+        const answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
         console.log('[Wayground Debug] Fallback Cohere raw:', answer);
         const match = answer.match(/\d+/);
         const num = match ? parseInt(match[0]) : NaN;
@@ -720,18 +720,18 @@ Respond with just the answer text, nothing else.`;
       }
     }
     
-    // Try Cohere - using v1/chat for trial key compatibility
+    // Try Cohere - using v2/chat endpoint
     if (keys.cohere) {
       showStatus('🌐 Cohere generating text answer...', 'info');
       try {
-        const response = await fetch('https://api.cohere.ai/v1/chat', {
+        const response = await fetch('https://api.cohere.ai/v2/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command',
+            model: 'command-r',
             message: prompt,
             max_tokens: 150,
             temperature: 0.3
@@ -744,7 +744,7 @@ Respond with just the answer text, nothing else.`;
           throw new Error(`HTTP ${response.status}`);
         }
         const data = await response.json();
-        answer = data.text?.trim() || data.message?.content?.trim();
+        answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
         console.log('[Wayground Debug] Cohere text answer:', answer);
         if (answer) {
           showStatus('✅ Cohere generated answer', 'success');
@@ -1192,14 +1192,14 @@ Respond with just the answer text, nothing else.`;
         const cohereKey = document.getElementById('wg_cohere_key').value.trim();
         if (cohereKey) {
           try {
-            const response = await fetch('https://api.cohere.ai/v1/chat', {
+            const response = await fetch('https://api.cohere.ai/v2/chat', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${cohereKey}`
               },
               body: JSON.stringify({
-                model: 'command',
+                model: 'command-r',
                 message: testPrompt,
                 max_tokens: 10,
                 temperature: 0.1
@@ -1208,7 +1208,7 @@ Respond with just the answer text, nothing else.`;
             
             if (response.ok) {
               const data = await response.json();
-              const answer = data.text?.trim() || data.message?.content?.trim();
+              const answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
               results.push(`✅ <b>Cohere:</b> Working (answered: "${answer}")`);
             } else {
               results.push(`❌ <b>Cohere:</b> HTTP ${response.status}`);
