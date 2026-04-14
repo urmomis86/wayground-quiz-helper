@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.2] - 2025-04-14
+
+### Fixed
+- **OpenRouter model** - Changed to `openrouter/free` (basic free model) to fix HTTP 404
+- **Cohere endpoint** - Changed from `api.cohere.com` to `api.cohere.ai` for trial key compatibility
+- **Updated all API calls** - Synchronized endpoints and models across all functions
+
 ## [6.2.1] - 2025-04-14
 
 ### Fixed
