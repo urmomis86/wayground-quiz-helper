@@ -459,7 +459,7 @@ Your answer (single number only):`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'meta-llama/llama-3-8b-instruct:free',
+                model: 'openrouter/free',
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: 50, // Increased for reasoning
                 temperature: 0.1
@@ -552,7 +552,7 @@ Your answer (single number only):`;
     // Cohere call with timeout - using v1/generate for trial key compatibility
     if (keys.cohere) {
       const coherePromise = Promise.race([
-        fetch('https://api.cohere.com/v1/generate', {
+        fetch('https://api.cohere.ai/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -668,7 +668,7 @@ Your answer (single number only):`;
             'HTTP-Referer': 'https://openrouter.ai/'
           },
           body: JSON.stringify({
-            model: 'meta-llama/llama-3-8b-instruct:free',
+            model: 'openrouter/free',
             messages: [{ role: 'user', content: prompt }],
             max_tokens: 20,
             temperature: 0.1
@@ -735,7 +735,7 @@ Your answer (single number only):`;
     if (keys.cohere) {
       try {
         showStatus('🔄 Trying Cohere fallback...', 'info');
-        const response = await fetch('https://api.cohere.com/v1/generate', {
+        const response = await fetch('https://api.cohere.ai/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -812,7 +812,7 @@ Respond with just the answer text, nothing else.`;
     if (keys.cohere) {
       showStatus('🌐 Cohere generating text answer...', 'info');
       try {
-        const response = await fetch('https://api.cohere.com/v1/generate', {
+        const response = await fetch('https://api.cohere.ai/v1/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1260,7 +1260,7 @@ Respond with just the answer text, nothing else.`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'meta-llama/llama-3-8b-instruct:free',
+                model: 'openrouter/free',
                 messages: [
                   { role: 'user', content: testPrompt }
                 ],
@@ -1319,7 +1319,7 @@ Respond with just the answer text, nothing else.`;
         const cohereKey = document.getElementById('wg_cohere_key').value.trim();
         if (cohereKey) {
           try {
-            const response = await fetch('https://api.cohere.com/v1/generate', {
+            const response = await fetch('https://api.cohere.ai/v1/generate', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
