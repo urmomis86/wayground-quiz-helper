@@ -55,7 +55,7 @@
   
   // Update checker (you can enhance this with actual version checking)
   function performUpdateCheck() {
-    const currentVersion = '6.2.7';
+    const currentVersion = '6.2.8';
     
     // Check your GitHub repository for latest version
     GM_xmlhttpRequest({
@@ -507,7 +507,7 @@ Your answer (single number only):`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-r',
+            model: 'command-r-08-2024',
             messages: [
               { role: 'user', content: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.' }
             ],
@@ -653,7 +653,7 @@ Your answer (single number only):`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-r',
+            model: 'command-r-08-2024',
             messages: [
               { role: 'user', content: prompt + '\n\nRespond with ONLY a single number (1-4):' }
             ],
@@ -732,7 +732,7 @@ Respond with just the answer text, nothing else.`;
             'Authorization': `Bearer ${keys.cohere}`
           },
           body: JSON.stringify({
-            model: 'command-r',
+            model: 'command-r-08-2024',
             messages: [
               { role: 'user', content: prompt }
             ],
@@ -1202,7 +1202,7 @@ Respond with just the answer text, nothing else.`;
                 'Authorization': `Bearer ${cohereKey}`
               },
               body: JSON.stringify({
-                model: 'command-r',
+                model: 'command-r-08-2024',
                 messages: [
                   { role: 'user', content: testPrompt }
                 ],
@@ -1328,7 +1328,7 @@ Respond with just the answer text, nothing else.`;
       max-width: 500px !important;
     `;
     
-    const currentVersion = '6.2.7';
+    const currentVersion = '6.2.8';
     const lastCheck = new Date(GM_getValue('last_update_check', 0)).toLocaleDateString();
     
     dialog.innerHTML = `

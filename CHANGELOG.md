@@ -2,6 +2,11 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.8] - 2025-04-15
+
+### Fixed
+- **Cohere model name** - Updated from `command-r` to `command-r-08-2024` for v2 API compatibility (fixes HTTP 422 error)
+
 ## [6.2.7] - 2025-04-15
 
 ### Changed
