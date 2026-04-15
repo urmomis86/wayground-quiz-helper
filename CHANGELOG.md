@@ -2,6 +2,15 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.5] - 2025-04-15
+
+### Removed
+- **NitroType support** - Removed nitrotype.com from supported websites
+- **NitroType @match directives** - Removed all nitrotype.com URL patterns from userscript
+
+### Changed
+- **README** - Updated to reflect wayground.com as the only supported platform
+
 ## [6.2.4] - 2025-04-14
 
 ### Fixed

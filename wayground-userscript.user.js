@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.2.4
+// @version      6.2.5
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -9,10 +9,6 @@
 // @match        https://*.wayground.com/*
 // @match        https://wayground.com/join/*
 // @match        https://*.wayground.com/join/*
-// @match        https://nitrotype.com/*
-// @match        https://www.nitrotype.com/*
-// @match        https://nitrotype.com/race/*
-// @match        https://www.nitrotype.com/race/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -511,7 +507,9 @@ Your answer (single number only):`;
           },
           body: JSON.stringify({
             model: 'command-r',
-            message: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.',
+            messages: [
+              { role: 'user', content: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.' }
+            ],
             max_tokens: 20,
             temperature: 0.1
           })

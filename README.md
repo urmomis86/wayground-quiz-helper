@@ -76,7 +76,7 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 ### Script Not Finding Questions
 
 - The script looks for specific patterns in quiz pages. If it's not detecting questions, check the browser console for debug logs.
-- The script currently supports wayground.com and nitrotype.com.
+- The script currently supports wayground.com.
 
 ### Rate Limiting
 
@@ -86,7 +86,6 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 ## Supported Websites
 
 - wayground.com
-- nitrotype.com
 
 ## Version History
 
