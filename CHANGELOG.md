@@ -2,6 +2,11 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.7] - 2025-04-15
+
+### Changed
+- Version bump to 6.2.7
+
 ## [6.2.5] - 2025-04-15
 
 ### Removed
