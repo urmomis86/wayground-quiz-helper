@@ -2,6 +2,14 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.5] - 2025-04-16
+
+### Added
+- **Comprehensive debug logging** - Added extensive console logging throughout the script for troubleshooting
+- **Element detection logging** - Detailed logs for question/option detection with selector information
+- **Click debugging** - Enhanced logging for click functionality including element type, visibility, and click methods
+- **API call logging** - Detailed logs for OpenRouter and Cohere API requests and responses
+
 ## [6.4.4] - 2025-04-16
 
 ### Changed
