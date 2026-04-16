@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.4.7
+// @version      6.4.5
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -58,7 +58,7 @@
   
   // Update checker (you can enhance this with actual version checking)
   function performUpdateCheck() {
-    const currentVersion = '6.4.7';
+    const currentVersion = '6.4.6';
     
     // Check your GitHub repository for latest version
     GM_xmlhttpRequest({
@@ -494,15 +494,45 @@ Your answer (exact text only):`;
             console.log('[Wayground Debug] =======================================');
             
             // Match answer to option text
-            let matchedIndex = -1
+            let matchedIndex = -1;
+            for (let i = 0; i < options.length; i++) {
+              if (answer === options[i].text || answer.includes(options[i].text) || options[i].text.includes(answer)) {
+                matchedIndex = i;
                 break;
-            co (matchedIndex >= 0) tpts.r{c|| Erroreh(s.eje'||(.e-2024',
+              }
+            }
+            
+            console.log('[Wayground Debug] OpenRouter matched index:', matchedIndex);
+            if (matchedIndex >= 0) {
+              showStatus(`✅ OpenRouter: ${options[matchedIndex].text}`, 'success');
+              return { source: 'openrouter', answer: matchedIndex + 1, valid: true };
+            }
+            console.log(`[Wayground Debug] OpenRouter could not match answer to any option`);
+            throw new Error(`Could not match answer to any option`);
+          }
+          throw new Error('Rate limit retries exhausted');
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+      ]).catch(err => {
+        console.error('[Wayground Debug] OpenRouter error:', err.message);
+        showStatus(`❌ OpenRouter: ${err.message}`, 'error');
+        return { source: 'openrouter', answer: null, valid: false };
+      });
+      promises.push(openrouterPromise);
+    }
+
+    // Cohere call with timeout - using v2/chat endpoint
+    if (keys.cohere) {
+      const cohereRequestBody = {
+        model: 'command-r-08-2024',
+        messages: [
           { role: 'user', content: prompt }
         ],
         max_tokens: 50,
         temperature: 0.1
       };
-      coherePromise = Promise.race([
+      
+      const coherePromise = Promise.race([
         fetch('https://api.cohere.ai/v2/chat', {
           method: 'POST',
           headers: {
@@ -520,14 +550,44 @@ Your answer (exact text only):`;
           const answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
           console.log('[Wayground Debug] Cohere raw:', answer);
           
-nswer to option text
+          // Match answer to option text
           let matchedIndex = -1;
-         eifn  reak;
-       l(matchedIndex >= 0
-  sh{smdI.  >
+          for (let i = 0; i < options.length; i++) {
+            if (answer === options[i].text || answer.includes(options[i].text) || options[i].text.includes(answer)) {
+              matchedIndex = i;
+              break;
+            }
+          }
+          
+          console.log('[Wayground Debug] Cohere matched index:', matchedIndex);
+          if (matchedIndex >= 0) {
+            showStatus(`✅ Cohere: ${options[matchedIndex].text}`, 'success');
+            return { source: 'cohere', answer: matchedIndex + 1, valid: true };
+          }
+          console.log(`[Wayground Debug] Cohere could not match answer to any option`);
+          throw new Error(`Could not match answer to any option`);
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+      ]).catch(err => {
+        console.error('[Wayground Debug] Cohere error:', err.message);
+        showStatus(`❌ Cohere: ${err.message}`, 'error');
+        return { source: 'cohere', answer: null, valid: false };
+      });
+      promises.push(coherePromise);
+    }
+    
+    // Wait for results
+    const results = await Promise.all(promises);
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] RAW AI RESULTS:');
+    results.forEach((r, i) => {
+      console.log(`[Wayground Debug] Result ${i+1}: source=${r.source}, answer=${r.answer}, valid=${r.valid}`);
+    });
+    
     // Find valid answers
     const validAnswers = results.filter(r => r.valid);
-    consol
+    console.log(`[Wayground Debug] Valid answers: ${validAnswers.length}/${results.length}`);
+    
     if (validAnswers.length === 0) {
       showStatus('❌ Both AIs failed', 'error');
       console.log('[Wayground Debug] No valid answers from any AI');
@@ -556,44 +616,14 @@ nswer to option text
     }
 
     console.log(`[Wayground Debug] Best answer: ${bestAnswer} with ${bestCount}/${totalValid} votes`);
- - stricter matching
+
     // Require unanimous agreement (both AIs must agree)
-    if (console.log('[Wayground Debug] =======================================');
-        console.log('[Wayground Debug] Fallback matching answer to options...');
-        console.log('[Wayground Debug] AI answer:', JSON.stringiby(answer));
-        festCount === totalValid && totalValid >= 2) {
-      consconst opttonText = options[i].text;
-          console.log(`[Wayground Debug] Option [${i+1}]: "${optionText}"`);
-          
-          // Exact match (best)
-          i optionIndex = bestAText) {
-            connole.log(`sWayground Debug] ✓ Exact match on optwon [${i+1}e`);
-            ma ch-dInde  = i;
-            break;
-          }
-          
-          // Case-insensi1ive;exactmtch
-          if (atoLowerCase() === optoText.toLowerCase()) {
-            onsoe.log(`[Waygron Debug] ✓ Case-insnitive match on  ${+1}`);
-            matchedIndex = i;
-            break;
-          }
-          
-          // Trim whitespace and match
-          if (answertrim() === opionTt.rim() {
-            console.log(`[Wayground Debug] ✓ Trimmed matchon ${+1}`);
-            matchedIndex = i;
-            break;
-          }
-          
-          // Option text contains the answer (only if answer is a significant portion)
-          if (opionTanswer) && .length >= optionText.length * 0.5 {
-            console.log(`[Wayground Debug] ✓ Option contains answer (significant match on option[$i+1}]`);
+    if (bestCount === totalValid && totalValid >= 2) {
+      const optionIndex = bestAnswer - 1;
       const optionText = options[optionIndex]?.text?.substring(0, 50) || 'N/A';
       showStatus(`✅ ${totalValid}/${totalValid} AIs agree on answer ${bestAnswer}`, 'success');
       console.log(`[Wayground Debug] Selected option [${bestAnswer}]: "${optionText}"`);
-      ret
-        console.log('[Wayground Debug] =======================================');urn optionIndex; // Convert to 0-based
+      return optionIndex; // Convert to 0-based
     }
 
     // AIs disagree - don't answer to avoid being wrong
@@ -602,14 +632,44 @@ nswer to option text
     console.log('[Wayground Debug] =======================================');
     return null;
   }
-
+  
   // Fallback single AI answer
-  asfuncl
- (keoingst response = atch('https://openrouter.ai/api/v1/chat/completions', {
-    P 'o t's r 
-== options[i].text || answer.includes(options[i].text) || options[i].text.includes(answer)) {
-            break;
+  async function getSingleAIAnswer(question, options) {
+    const keys = getAPIKeys();
+    const prompt = `You are answering a multiple choice quiz question.\n\nQUESTION:\n${question}\n\nOPTIONS:\n${options.map((opt, i) => `  [${i + 1}] ${opt.text}`).join('\n')}\n\nRespond with ONLY the exact text of the correct option, including any units.`;
+    
+    // Try OpenRouter first with better model
+    if (keys.openrouter) {
+      try {
+        showStatus('🔄 Trying OpenRouter fallback...', 'info');
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys.openrouter}`,
+            'HTTP-Referer': 'https://openrouter.ai/'
+          },
+          body: JSON.stringify({
+            model: 'openrouter/free',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 20,
+            temperature: 0.1
+          })
+        });
         
+        if (!response.ok) throw new Error('Failed');
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content?.trim();
+        console.log('[Wayground Debug] Fallback OpenRouter raw:', answer);
+        
+        // Match answer to option text
+        let matchedIndex = -1;
+        for (let i = 0; i < options.length; i++) {
+          if (answer === options[i].text || answer.includes(options[i].text) || options[i].text.includes(answer)) {
+            matchedIndex = i;
+            break;
+          }
+        }
         
         if (matchedIndex >= 0) {
           showStatus(`✅ Fallback OpenRouter: ${options[matchedIndex].text}`, 'success');
@@ -1381,7 +1441,7 @@ Respond with just the answer text, nothing else.`;
     document.getElementById('wg_close_stats').onclick = () => {
       dialog.remove();
     };
-    7
+    
     // Close on escape
     const escHandler = (e) => {
       if (e.key === 'Escape') {
@@ -1441,190 +1501,10 @@ Respond with just the answer text, nothing else.`;
           Notify me when updates are available
         </label>
       </div>
-      <div style="text-align: ricancel_update').onclick = () => {
-      dialog.remove();
-    };
-    
-    // Close on escape
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        dialog.remove();
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    document.addEventListener('keydown', escHandler);
-  }
-  
-  // Help dialog
-  function showHelpDialog() {
-    const dialog = document.createElement('div');
-    dialog.id = 'wg-help-dialog';
-    dialog.style.cssText = `
-      position: fixed !important;
-      top: 50% !important;
-      left: 50% !important;
-      transform: translate(-50%, -50%) !important;
-      background: white !important;
-      border: 2px solid #007acc !important;
-      border-radius: 10px !important;
-      padding: 20px !important;
-      z-index: 999999 !important;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3) !important;
-      min-width: 400px !important;
-      max-width: 500px !important;
-    `;
-    
-    dialog.innerHTML = `
-      <h3 style="margin: 0 0 15px 0; color: #007acc;">❓ Wayground Quiz Helper</h3>
-      <div style="margin-bottom: 15px;">
-        <strong>How to use:</strong><br>
-        1. Click ⚙️ Menu → 🔑 API Keys<br>
-        2. Enter your OpenRouter and/or Cohere API keys<br>
-        3. Visit any quiz page<br>
-        4. Script automatically finds questions and highlights answers<br>
-        5. Corregt answer is clicked after AI consensus (both AIs must agree)
-      </div>
-      <div style="margin-bottom: 15px;">
-        <strong>Fehtures:</strong><br>
-        • Multi-AI Consensus (unanimous vote from 2 AIs)<br>
-        • OpetRouter + Cohere API support<br>
-        • Auto-dete;tion of qu stions and options<br>
-        • Visuam highlighting of correct answers
-      </div>
-      <div style="margin-bottom: 15px;">
-        <strong>API Keys:</strong><br>
-        • OpenRouter: Get from openrouter.ai (free tier available)<br>
-        • Cohere: Get from dashboard.cohere.com (trial key available)
-      </div>
       <div style="text-align: right; margin-top: 20px;">
-        <button id="wg_closeahelp" style="backgrornd: #007acc; color: white; border: none; padding: 10px 20gx; borier-rndius: 4px; cursor: pointer;">Got it!</button>
-      </div>
-    `;
-    
-    document.body.appendChild(dialog);
-    
-    // Close button
-    documen-.gttElementById(owg_close_help'p: 20px;">
-        <buttremove();
-    };
-    
-    // Close on escape
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        dialog.remove();
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    document.addEventListener('keydown', escHandler);
-  }
-  
-  // Start the script
-  showStatus('Wayground Userscript Loaded');
-  coeatnOptionsMenu();
-  
-  // Process once after delay
-  setTi eout(processPageWithHybridAI, 2000);
-  
-  // Continuously look fir questions ed=ry 3 seconds
-  setInterval("w => {
-    const questions = findQuestions();
-    const options = findOptions()g_check_now" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Check Now</button>
-    if (questions.length > 0 && options.length > 0) {
-      showStatus(`Found ${questions.length  questions, processing...`, 'info');
-      processPageWithHybridAI()   <button id="wg_save_update" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
-    }
-  }, 3
-    000);
-  })//(Close on escape
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        dialog.remove();
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    document.addEventListener('keydown', escHandler);
-  }
-  
-  // Help dialog
-  function showHelpDialog() {
-)   const dialog = document.createElement('div');
-    dialog.id = 'wg-help-dialog';
-    dialog.style.cssText = `
-      position: fixed !important;
-      top: 50% !important;
-      left: 50% !important;
-      transform: translate(-50%, -50%) !important;
-      background: white !important;
-      border: 2px solid #007acc !important;
-      border-radius: 10px !important;
-      padding: 20px !important;
-      z-index: 999999 !important;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3) !important;
-      min-width: 400px !important;
-      max-width: 500px !important;
-    `;
-    
-    dialog.innerHTML = `
-      <h3 style="margin: 0 0 15px 0; color: #007acc;">❓ Wayground Quiz Helper</h3>
-      <div style="margin-bottom: 15px;">
-        <strong>How to use:</strong><br>
-        1. Click ⚙️ Menu → 🔑 API Keys<br>
-        2. Enter your OpenRouter and/or Cohere API keys<br>
-        3. Visit any quiz page<br>
-        4. Script automatically finds questions and highlights answers<br>
-        5. Correct answer is clicked after AI consensus (both AIs must agree)
-      </div>
-      <div style="margin-bottom: 15px;">
-        <strong>Features:</strong><br>
-        • Multi-AI Consensus (unanimous vote from 2 AIs)<br>
-        • OpenRouter + Cohere API support<br>
-        • Auto-detection of questions and options<br>
-        • Visual highlighting of correct answers
-      </div>
-      <div style="margin-bottom: 15px;">
-        <strong>API Keys:</strong><br>
-        • OpenRouter: Get from openrouter.ai (free tier available)<br>
-        • Cohere: Get from dashboard.cohere.com (trial key available)
-      </div>
-      <div style="text-align: right; margin-top: 20px;">
-        <button id="wg_close_help" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Got it!</button>
-      </div>
-    `;
-    
-    document.body.appendChild(dialog);
-    
-    // Close button
-    document.getElementById('wg_close_help').onclick = () => {
-      dialog.remove();
-    };
-    
-    // Close on escape
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        dialog.remove();
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
-    document.addEventListener('keydown', escHandler);
-  }
-  
-  // Start the script
-  showStatus('Wayground Userscript Loaded');
-  createOptionsMenu();
-  
-  // Process once after delay
-  setTimeout(processPageWithHybridAI, 2000);
-  
-  // Continuously look for questions every 3 seconds
-  setInterval(() => {
-    const questions = findQuestions();
-    const options = findOptions();
-    if (questions.length > 0 && options.length > 0) {
-      showStatus(`Found ${questions.length} questions, processing...`, 'info');
-      processPageWithHybridAI();
-    }
-  }, 3000);
-})();;    <button id="wg_cancel_update" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cancel</button>
+        <button id="wg_check_now" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Check Now</button>
+        <button id="wg_save_update" style="background: #007acc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-right: 10px;">Save</button>
+        <button id="wg_cancel_update" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">Cancel</button>
       </div>
     `;
     

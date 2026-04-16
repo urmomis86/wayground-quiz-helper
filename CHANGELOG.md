@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.7] - 2025-04-16
+
+### Fixed
+- **Answer matching** - Improved matching logic to prevent AI from selecting answers not on screen
+- **Stricter matching** - Only accept exact matches or very close matches (significant portion match)
+- **Match logging** - Added detailed logging for answer matching process to debug mismatch issues
+
 ## [6.4.6] - 2025-04-16
 
 ### Fixed
