@@ -33,7 +33,7 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 3. Tampermonkey will open and confirm the installation
 
 **Option 2: Manual Installation**
-1. Download the latest version: `wayground-userscript-6.4.2.user.js`
+1. Download the latest version: `wayground-userscript-6.4.3.user.js`
 2. Open Tampermonkey dashboard
 3. Click the "+" button to create a new script
 4. Copy and paste the entire contents of the userscript file
@@ -52,7 +52,7 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 
 ## Usage
 
-1. Visit a quiz page (supported sites include wayground.com and nitrotype.com)
+1. Visit a quiz page (supported sites include wayground.com and kahoot.com)
 2. The script automatically detects questions and options
 3. Both AIs analyze the question and vote on the correct answer
 4. If both AIs agree, the answer is highlighted in green and clicked
@@ -110,5 +110,7 @@ This is a personal project for educational purposes. Contributions are welcome b
 This userscript is for educational purposes only. Using automated scripts on quiz platforms may violate their terms of service. Use responsibly and at your own risk.
 
 ## GitHub Repository
+
+https://github.com/urmomis86/wayground-quiz-helper
 
 https://github.com/urmomis86/wayground-quiz-helper

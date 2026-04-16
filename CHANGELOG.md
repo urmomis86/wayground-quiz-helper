@@ -2,6 +2,11 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.3] - 2025-04-16
+
+### Added
+- **Kahoot support** - Added kahoot.com and play.kahoot.it to supported websites
+
 ## [6.4.2] - 2025-04-16
 
 ### Fixed

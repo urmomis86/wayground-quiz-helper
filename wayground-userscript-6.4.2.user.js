@@ -9,9 +9,6 @@
 // @match        https://*.wayground.com/*
 // @match        https://wayground.com/join/*
 // @match        https://*.wayground.com/join/*
-// @match        https://kahoot.com/*
-// @match        https://*.kahoot.com/*
-// @match        https://play.kahoot.it/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
