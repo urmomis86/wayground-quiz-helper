@@ -2,6 +2,11 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.1] - 2025-04-16
+
+### Fixed
+- **Syntax error** - Removed leftover try block without catch/finally that was causing script to fail
+
 ## [6.4.0] - 2025-04-16
 
 ### Changed

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.2.9
+// @version      6.4.0
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
