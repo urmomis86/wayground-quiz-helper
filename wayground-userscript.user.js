@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.4.7
+// @version      6.5.0
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -58,7 +58,7 @@
   
   // Update checker (you can enhance this with actual version checking)
   function performUpdateCheck() {
-    const currentVersion = '6.4.7';
+    const currentVersion = '6.5.0';
     
     // Check your GitHub repository for latest version
     GM_xmlhttpRequest({
@@ -257,6 +257,78 @@
     return uniqueQuestions;
   }
   
+  // Find images on the page for vision AI
+  function findImages() {
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] Starting findImages...');
+    
+    const images = [];
+    const imgElements = document.querySelectorAll('img');
+    
+    console.log(`[Wayground Debug] Found ${imgElements.length} img elements`);
+    
+    imgElements.forEach((img, i) => {
+      const src = img.src;
+      const alt = img.alt || '';
+      
+      // Skip very small images (icons, decorations)
+      if (img.naturalWidth < 50 || img.naturalHeight < 50) {
+        console.log(`[Wayground Debug] Skipping small image [${i+1}]: ${src} (${img.naturalWidth}x${img.naturalHeight})`);
+        return;
+      }
+      
+      // Skip if it's an icon or decorative
+      if (alt.toLowerCase().includes('icon') || alt.toLowerCase().includes('logo') || alt.toLowerCase().includes('decoration')) {
+        console.log(`[Wayground Debug] Skipping decorative image [${i+1}]: ${src}`);
+        return;
+      }
+      
+      console.log(`[Wayground Debug] ✓ Found image [${i+1}]: ${src} (${img.naturalWidth}x${img.naturalHeight})`);
+      images.push({
+        element: img,
+        src: src,
+        alt: alt,
+        width: img.naturalWidth,
+        height: img.naturalHeight
+      });
+    });
+    
+    console.log(`[Wayground Debug] Total usable images: ${images.length}`);
+    console.log('[Wayground Debug] =======================================');
+    
+    return images;
+  }
+  
+  // Convert image to base64
+  async function imageToBase64(img) {
+    try {
+      console.log('[Wayground Debug] Converting image to base64:', img.src);
+      
+      // If it's a data URL, return it directly
+      if (img.src.startsWith('data:')) {
+        console.log('[Wayground Debug] Image is already a data URL');
+        return img.src;
+      }
+      
+      // Fetch the image and convert to base64
+      const response = await fetch(img.src);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result;
+          console.log('[Wayground Debug] ✓ Image converted to base64, length:', base64.length);
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error('[Wayground Debug] Failed to convert image to base64:', e);
+      return null;
+    }
+  }
+  
   function findOptions() {
     console.log('[Wayground Debug] =======================================');
     console.log('[Wayground Debug] Starting findOptions...');
@@ -404,13 +476,17 @@
   }
   
   // Call both AIs simultaneously with improved prompting for maximum accuracy
-  async function getBothAIAnswersWithRetry(question, options) {
+  async function getBothAIAnswersWithRetry(question, options, images = []) {
     const keys = getAPIKeys();
     
     if (!keys.openrouter && !keys.cohere) {
       showStatus('⚠️ Set API keys in settings', 'error');
       return null;
     }
+    
+    console.log('[Wayground Debug] =======================================');
+    console.log('[Wayground Debug] Images provided:', images.length);
+    console.log('[Wayground Debug] =======================================');
     
     // Build enhanced prompt with chain-of-thought reasoning for better accuracy
     const prompt = `You are answering a multiple choice quiz question. Think step-by-step before answering.
@@ -459,6 +535,40 @@ Your answer (exact text only):`;
           let retries = 3;
           let delay = 2000; // Start with 2 second delay
           
+          // Use vision model if images are present
+          const useVisionModel = images.length > 0;
+          const model = useVisionModel ? 'anthropic/claude-3-haiku' : 'openrouter/free';
+          
+          console.log('[Wayground Debug] OpenRouter using model:', model, '(vision:', useVisionModel, ')');
+          
+          // Convert images to base64 if using vision model
+          let imageBase64s = [];
+          if (useVisionModel) {
+            console.log('[Wayground Debug] Converting', images.length, 'images to base64...');
+            for (const img of images) {
+              const base64 = await imageToBase64(img);
+              if (base64) {
+                imageBase64s.push(base64);
+              }
+            }
+            console.log('[Wayground Debug] Successfully converted', imageBase64s.length, 'images to base64');
+          }
+          
+          // Build message content
+          let messageContent;
+          if (useVisionModel && imageBase64s.length > 0) {
+            // Vision model format: array with text and images
+            messageContent = [
+              { type: 'text', text: prompt },
+              ...imageBase64s.map(b64 => ({ type: 'image_url', image_url: { url: b64 } }))
+            ];
+            console.log('[Wayground Debug] Using vision message format with', imageBase64s.length, 'images');
+          } else {
+            // Regular text model format
+            messageContent = prompt;
+            console.log('[Wayground Debug] Using text-only message format');
+          }
+          
           while (retries > 0) {
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
@@ -468,9 +578,9 @@ Your answer (exact text only):`;
                 'HTTP-Referer': 'https://openrouter.ai/'
               },
               body: JSON.stringify({
-                model: 'openrouter/free',
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 50, // Increased for reasoning
+                model: model,
+                messages: [{ role: 'user', content: messageContent }],
+                max_tokens: useVisionModel ? 100 : 50, // Increased for vision
                 temperature: 0.1
               })
             });
@@ -836,6 +946,7 @@ Respond with just the answer text, nothing else.`;
     const questions = findQuestions();
     const options = findOptions();
     const textInputs = findTextInputs();
+    const images = findImages();
     
     console.log('[Wayground Debug] =======================================');
     console.log('[Wayground Debug] QUESTIONS FOUND:', questions.length);
@@ -905,6 +1016,11 @@ Respond with just the answer text, nothing else.`;
     const questionText = questions[0].text;
     console.log('Using question:', questionText.substring(0, 100));
     
+    // Show if images were detected
+    if (images.length > 0) {
+      showStatus(`🖼️ ${images.length} image(s) detected - using vision AI`, 'info');
+    }
+    
     // PRIORITY: MAXIMUM ACCURACY - 100% AI CONSENSUS
     showStatus('🎯 PRIORITY: Maximum Accuracy Mode', 'info');
     
@@ -917,7 +1033,7 @@ Respond with just the answer text, nothing else.`;
       attempts++;
       showStatus(`🤖 AI Attempt ${attempts}/${maxAttempts}...`, 'info');
       
-      answerIndex = await getBothAIAnswersWithRetry(questionText, options);
+      answerIndex = await getBothAIAnswersWithRetry(questionText, options, images);
       
       if (answerIndex === null && attempts < maxAttempts) {
         showStatus('⏳ Retrying in 2 seconds...', 'warning');
