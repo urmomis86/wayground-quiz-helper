@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.4.0
+// @version      6.4.2
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -992,17 +992,86 @@ Respond with just the answer text, nothing else.`;
     answerElement.style.backgroundColor = '#ccffcc';
     
     console.log('Clicking answer element:', answerElement);
+    console.log('Element tag:', answerElement.tagName);
+    console.log('Element type:', answerElement.type);
     showStatus('🖱️ CLICKING ANSWER...', 'info');
     
-    // Click multiple times to ensure it registers
-    answerElement.click();
-    setTimeout(() => answerElement.click(), 500);
-    setTimeout(() => answerElement.click(), 1000);
+    // Find the actual clickable element
+    let clickableElement = answerElement;
+    
+    // If it's a label, try to find the associated input
+    if (answerElement.tagName === 'LABEL') {
+      const labelFor = answerElement.getAttribute('for');
+      if (labelFor) {
+        const input = document.getElementById(labelFor);
+        if (input) {
+          clickableElement = input;
+          console.log('Found associated input for label:', input);
+        }
+      } else {
+        // Label might wrap the input
+        const wrappedInput = answerElement.querySelector('input[type="radio"], input[type="checkbox"]');
+        if (wrappedInput) {
+          clickableElement = wrappedInput;
+          console.log('Found wrapped input in label:', wrappedInput);
+        }
+      }
+    }
+    
+    // If it's a div or span, try to find a clickable child
+    if (answerElement.tagName === 'DIV' || answerElement.tagName === 'SPAN') {
+      const childInput = answerElement.querySelector('input[type="radio"], input[type="checkbox"], button, [role="button"], [role="option"]');
+      if (childInput) {
+        clickableElement = childInput;
+        console.log('Found clickable child element:', childInput);
+      }
+    }
+    
+    // Scroll element into view
+    clickableElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Focus the element
+    try {
+      clickableElement.focus();
+    } catch (e) {
+      console.log('Could not focus element:', e);
+    }
+    
+    // For radio/checkbox inputs, set checked property directly
+    if (clickableElement.type === 'radio' || clickableElement.type === 'checkbox') {
+      console.log('Setting checked property on radio/checkbox');
+      clickableElement.checked = true;
+      // Trigger change event
+      clickableElement.dispatchEvent(new Event('change', { bubbles: true }));
+      clickableElement.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      // For other elements, use click with multiple methods
+      console.log('Using click method');
+      clickableElement.click();
+      
+      // Try alternative click methods
+      setTimeout(() => {
+        try {
+          clickableElement.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        } catch (e) {
+          console.log('MouseEvent dispatch failed:', e);
+        }
+      }, 100);
+    }
+    
+    // Additional clicks to ensure it registers
     setTimeout(() => {
-      answerElement.click();
+      try {
+        clickableElement.click();
+      } catch (e) {
+        console.log('Second click failed:', e);
+      }
+    }, 500);
+    
+    setTimeout(() => {
       showStatus('✅ Answer clicked!', 'success');
       console.log('=== HYBRID AI COMPLETE ===');
-    }, 2000);
+    }, 1000);
   }
   
   // Script enabled state

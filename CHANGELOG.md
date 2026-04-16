@@ -2,6 +2,15 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.2] - 2025-04-16
+
+### Fixed
+- **Click functionality** - Improved answer clicking to handle different element types (labels, divs, spans, radio buttons)
+- **Element detection** - Script now finds the actual clickable element (e.g., finds input inside label)
+- **Radio button support** - Directly sets checked property for radio/checkbox inputs
+- **Scroll to view** - Elements are scrolled into view before clicking
+- **Multiple click methods** - Uses click(), MouseEvent dispatch, and property setting for reliability
+
 ## [6.4.1] - 2025-04-16
 
 ### Fixed
