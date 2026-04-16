@@ -27,6 +27,12 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 
 ### Installing the Userscript
 
+**Option 1: Install from Greasy Fork (Recommended)**
+1. Visit [Greasy Fork](https://greasyfork.org/en/scripts/572139-universal-quiz-helper)
+2. Click the "Install this script" button
+3. Tampermonkey will open and confirm the installation
+
+**Option 2: Manual Installation**
 1. Download the latest version: `wayground-userscript-6.4.1.user.js`
 2. Open Tampermonkey dashboard
 3. Click the "+" button to create a new script
