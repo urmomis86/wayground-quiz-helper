@@ -499,17 +499,6 @@ Your answer (single number only):`;
 
     // Cohere call with timeout - using v2/chat endpoint
     if (keys.cohere) {
-      const cohereRequestBody = {
-        model: 'command-r-08-2024',
-        messages: [
-          { role: 'user', content: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.' }
-        ],
-        max_tokens: 20,
-        temperature: 0.1
-      };
-      
-      console.log('[Wayground Debug] Cohere request body:', JSON.stringify(cohereRequestBody, null, 2));
-      
       const coherePromise = Promise.race([
         fetch('https://api.cohere.ai/v2/chat', {
           method: 'POST',
@@ -517,18 +506,21 @@ Your answer (single number only):`;
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${keys.cohere}`
           },
-          body: JSON.stringify(cohereRequestBody)
+          body: JSON.stringify({
+            model: 'command-r-08-2024',
+            messages: [
+              { role: 'user', content: prompt + '\n\nYou MUST respond with ONLY a single number (1, 2, 3, or 4). Never include text or explanations.' }
+            ],
+            max_tokens: 20,
+            temperature: 0.1
+          })
         }).then(async (response) => {
-          console.log('[Wayground Debug] Cohere response status:', response.status);
           if (!response.ok) {
             const errText = await response.text();
             console.error('[Wayground Debug] Cohere error response:', errText);
-            console.error('[Wayground Debug] Cohere error status:', response.status);
-            console.error('[Wayground Debug] Cohere error headers:', Object.fromEntries(response.headers.entries()));
-            throw new Error(`HTTP ${response.status}: ${errText}`);
+            throw new Error(`HTTP ${response.status}`);
           }
           const data = await response.json();
-          console.log('[Wayground Debug] Cohere response data:', JSON.stringify(data, null, 2));
           const answer = data.message?.content?.[0]?.text?.trim() || data.text?.trim();
           console.log('[Wayground Debug] Cohere raw:', answer);
           const match = answer.match(/\d+/);
