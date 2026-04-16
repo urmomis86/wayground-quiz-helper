@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.0] - 2025-04-16
+
+### Changed
+- **Answer format** - AI now returns actual answer text (e.g., "84.9 m²") instead of numbers (1-4)
+- **Prompting** - Updated prompts to request exact answer text including units
+- **Answer matching** - Implemented text matching logic to match AI responses to option text
+
 ## [6.3.0] - 2025-04-16
 
 ### Fixed
