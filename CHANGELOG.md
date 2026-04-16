@@ -2,6 +2,13 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.4.6] - 2025-04-16
+
+### Fixed
+- **Rate limit handling** - Script now uses answer from AI that responds successfully instead of waiting for both AIs
+- **Promise.allSettled** - Changed from Promise.all to Promise.allSettled to handle individual AI failures
+- **Single AI fallback** - If one AI is rate limiting, the other AI's answer is used immediately
+
 ## [6.4.5] - 2025-04-16
 
 ### Added
