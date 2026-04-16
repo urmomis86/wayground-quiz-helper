@@ -58,7 +58,7 @@
   
   // Update checker (you can enhance this with actual version checking)
   function performUpdateCheck() {
-    const currentVersion = '6.4.3';
+    const currentVersion = '6.4.1';
     
     // Check your GitHub repository for latest version
     GM_xmlhttpRequest({
@@ -1429,7 +1429,7 @@ Respond with just the answer text, nothing else.`;
       max-width: 500px !important;
     `;
     
-    const currentVersion = '6.4.3';
+    const currentVersion = '6.4.1';
     const lastCheck = new Date(GM_getValue('last_update_check', 0)).toLocaleDateString();
     
     dialog.innerHTML = `
