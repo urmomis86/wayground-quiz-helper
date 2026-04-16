@@ -2,6 +2,11 @@
 
 All notable changes to the Wayground Quiz Helper userscript.
 
+## [6.2.9] - 2025-04-16
+
+### Changed
+- **Debug logging** - Added detailed logging for Cohere API requests and responses to debug HTTP 422 error
+
 ## [6.2.8] - 2025-04-15
 
 ### Fixed

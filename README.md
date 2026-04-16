@@ -27,7 +27,7 @@ A Tampermonkey userscript that automatically answers quiz questions using Multi-
 
 ### Installing the Userscript
 
-1. Download the latest version: `wayground-userscript-6.2.8.user.js`
+1. Download the latest version: `wayground-userscript-6.2.9.user.js`
 2. Open Tampermonkey dashboard
 3. Click the "+" button to create a new script
 4. Copy and paste the entire contents of the userscript file

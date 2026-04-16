@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.2.9
+// @version      6.2.7
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -55,7 +55,7 @@
   
   // Update checker (you can enhance this with actual version checking)
   function performUpdateCheck() {
-    const currentVersion = '6.2.9';
+    const currentVersion = '6.2.8';
     
     // Check your GitHub repository for latest version
     GM_xmlhttpRequest({
@@ -1336,7 +1336,7 @@ Respond with just the answer text, nothing else.`;
       max-width: 500px !important;
     `;
     
-    const currentVersion = '6.2.9';
+    const currentVersion = '6.2.8';
     const lastCheck = new Date(GM_getValue('last_update_check', 0)).toLocaleDateString();
     
     dialog.innerHTML = `
@@ -1476,6 +1476,38 @@ Respond with just the answer text, nothing else.`;
   // Auto-copy to downloads when script is updated
   function autoCopyToDownloads() {
     try {
+      const scriptContent = document.documentElement.outerHTML;
+      const currentVersionMatch = scriptContent.match(/@version\s+([0-9.]+)/);
+      const currentVersion = currentVersionMatch ? currentVersionMatch[1] : '1.0';
+      
+      const versionParts = currentVersion.split('.');
+      versionParts[2] = (parseInt(versionParts[2]) + 1).toString();
+      const newVersion = versionParts.join('.');
+      
+      const updatedScriptContent = scriptContent.replace(
+        /@version\s+[0-9.]+/,
+        `@version      ${newVersion}`
+      );
+      
+      const blob = new Blob([updatedScriptContent], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wayground-userscript-v${newVersion}.user.js`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log(`Script v${newVersion} copied to downloads folder`);
+      showStatus(`Script v${newVersion} copied to downloads!`, 'success');
+    } catch (error) {
+      console.error('Error copying script:', error);
+    }
+  }
+
   // Start the script
   showStatus('Wayground Userscript Loaded');
   createOptionsMenu();
