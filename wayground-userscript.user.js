@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Quiz Helper
 // @namespace    http://tampermonkey.net/
-// @version      6.4.5
+// @version      6.4.6
 // @license      GPL-3.0
 // @description  Auto-answer quiz questions with Multi-AI Consensus (OpenRouter + Cohere)
 // @author       You
@@ -985,7 +985,6 @@ Respond with just the answer text, nothing else.`;
       }
     }
     
-    const rlModel = selectBestModel();
     let decisionMethod = 'AI_CONSENSUS';
     
     if (answerIndex === null) {
@@ -1395,6 +1394,8 @@ Respond with just the answer text, nothing else.`;
   
   // Stats dialog
   function showStatsDialog() {
+    const rlStats = {}; // Initialize empty stats object
+    
     const dialog = document.createElement('div');
     dialog.id = 'wg-stats-dialog';
     dialog.style.cssText = `
@@ -1426,6 +1427,10 @@ Respond with just the answer text, nothing else.`;
           </div>
         </div>
       `;
+    }
+    
+    if (Object.keys(rlStats).length === 0) {
+      statsHtml += '<div style="padding: 10px; color: #666;">No stats available yet.</div>';
     }
     
     statsHtml += `
